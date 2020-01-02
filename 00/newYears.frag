@@ -1,15 +1,26 @@
 #define INV_GAMMA 0.454545
 #define AA 2
 
-#define CIRCLE 1.0f
-#define CIRCLE2 2.0f
+#define CLOCK 1.0f
+#define CLOCK_RADIUS 0.35f
 
 #define ONETOZERO(num) (num + 1.0f) / 2.0f
 
 /*Game Plan:
-    [ ] Clock
+    -Todo
     [ ] Hand strikes twelve
     [ ] Fireworks from behind the clock
+
+    -In progress
+    [ ] Clock Face
+        - [x] Draw a 2D circle
+        - [ ] Mark the 12 hours 
+        - [ ] Clock hands
+
+    -Done
+
+    -Nice to haves
+    [ ] Draw Roman Numerals
     [ ] Star background
     [ ] Buildings w/ lights
 */
@@ -26,16 +37,14 @@ Map(vec2 uv)
     float res = -1.0;
 
     //If you're inside the sdf, return it's ID
-    res = (sdCircle(uv - vec2(0.1, 0.1), 0.35) <= 0.0) ? CIRCLE2 : res;  
-    res = (sdCircle(uv - vec2(0.0, 0.0), 0.35) <= 0.0) ? CIRCLE : res;  
-
+    res = (sdCircle(uv - vec2(0.0, 0.0), CLOCK_RADIUS) <= 0.0) ? CLOCK : res;  
 
 
     return res;
 }
 
 vec3
-Shading(float id)
+Shading(vec2 uv, float id)
 {
     vec3 col;
     //Default case
@@ -44,14 +53,38 @@ Shading(float id)
         col = vec3(1.0);
     }
 
-    if (id == CIRCLE)
+    if (id == CLOCK)
     {
-        col = vec3(1.0 * ONETOZERO(sin(iTime)), 0.0, ONETOZERO(sin(2.0*iTime)));
-    }
+        col = vec3(1.0 * ONETOZERO(sin(3.33*iTime)), 1.0 * ONETOZERO(sin(0.5*iTime-0.2)), ONETOZERO(sin(2.0*iTime - 0.5)));
 
-    if (id == CIRCLE2)
-    {
-        col = vec3(0.0, 1.0, 0.0);
+        float r = length(uv);
+        float a = atan(uv.y, uv.x);
+        //r *= cos(a*12.0);
+        bool inRadius = r > 0.3 && r < 0.35;
+        bool inAngle =  a > 0.0 && a < 0.1;
+        if( inAngle && inRadius )
+        {
+            col = vec3(0.0, 0.0, 0.0);
+        }
+
+        //Divide clock into pizza slices
+        //float r = cos(atan(uv.y, uv.x)*12.0);
+        //col *= smoothstep(r+0.01, r, length(uv));
+
+        //float r = cos(atan(uv.y, uv.x)*12.0);
+        //col *= smoothstep(r, r+0.01, (uv.y));
+
+        //vec2 q = floor(uv*12.0);
+        //float r = mod(q.x+q.y, 2.0);
+        //col *= r;
+
+        //float r = 0.2 + 0.1*cos(atan(uv.y, uv.x)*12.0);
+        //col *= smoothstep(r,r+0.01, length(uv));
+
+        if (abs(uv.x- 0.24) < 0.02 && abs(uv.y) < 0.02)
+        {
+        //    col = vec3(0.0);
+        }
     }
 
     return col;
@@ -64,7 +97,7 @@ Render(vec2 uv)
     float id = Map(uv);
 
     //Shading
-    vec3 col = Shading(id);
+    vec3 col = Shading(uv,id);
 
     //Post processing
 
