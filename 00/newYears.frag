@@ -1,25 +1,30 @@
 #define INV_GAMMA 0.454545
 #define AA 2
+#define M_PI 3.1415926535
 
-#define CLOCK 1.0f
-#define CLOCK_RADIUS 0.35f
+#define CLOCKFACE_ID 1.0f
+#define CLOCKFACE_RADIUS 0.35f
+
+#define BOX_ID 2.0f
+#define BOX_SIZE vec2(0.0025, 0.17)
 
 #define ONETOZERO(num) (num + 1.0f) / 2.0f
 
+#define DEBUGCOL vec3(1.0, 0.0,1.0)
 /*Game Plan:
-    -Todo
+    Todo
     [ ] Hand strikes twelve
     [ ] Fireworks from behind the clock
 
-    -In progress
-    [ ] Clock Face
-        - [x] Draw a 2D circle
-        - [ ] Mark the 12 hours 
-        - [ ] Clock hands
+    In progress
+    - [ ] Moving the clock hands
 
-    -Done
+    Done
+    - [x] Draw clock face
+    - [x] Mark the 12 hours 
+    - [x] Clock hands
 
-    -Nice to haves
+    Nice to haves
     [ ] Draw Roman Numerals
     [ ] Star background
     [ ] Buildings w/ lights
@@ -32,13 +37,33 @@ sdCircle(vec2 pos, float radius)
 }
 
 float
+sdBox(vec2 pos, vec2 sizes)
+{
+    return length(max(abs(pos) - sizes, vec2(0.0)));
+}
+
+float
 Map(vec2 uv) 
 {
     float res = -1.0;
 
-    //If you're inside the sdf, return it's ID
-    res = (sdCircle(uv - vec2(0.0, 0.0), CLOCK_RADIUS) <= 0.0) ? CLOCK : res;  
+    vec2 trans = vec2(0.0, -0.12);
+    vec2 bigHand = uv - vec2(0.0, 0.12) - trans;
+    float a = M_PI* sin(iTime);
+    mat2 rot = mat2(cos(a), sin(a), -sin(a), cos(a));
+    bigHand = bigHand * (rot) + trans  ;
 
+    trans = vec2(0.0, -0.12);
+    vec2 littleHand = uv - vec2(0.0, 0.12) - trans;
+    a = M_PI* sin(iTime);
+    rot = mat2(cos(a), sin(a), -sin(a), cos(a));
+    littleHand = littleHand * (rot) + trans  ;
+
+    //If you're inside the sdf, return it's ID
+    res = (sdCircle(uv - vec2(0.0, 0.0), CLOCKFACE_RADIUS) <= 0.0) ? CLOCKFACE_ID : res;  
+    res = (sdBox(bigHand, BOX_SIZE) <= 0.0) ? BOX_ID : res;  
+    res = (sdBox(littleHand, vec2(0.01, 0.1)) <= 0.0) ? BOX_ID : res;  
+    res = (sdCircle(uv - vec2(0.0, 0.0), 0.01) <= 0.0) ? 3.0f : res;  
 
     return res;
 }
@@ -50,41 +75,30 @@ Shading(vec2 uv, float id)
     //Default case
     if (id  == -1.0f)
     {
-        col = vec3(1.0);
+        col = DEBUGCOL;
     }
 
-    if (id == CLOCK)
+    if (id == BOX_ID)
     {
-        col = vec3(1.0 * ONETOZERO(sin(3.33*iTime)), 1.0 * ONETOZERO(sin(0.5*iTime-0.2)), ONETOZERO(sin(2.0*iTime - 0.5)));
+        col = vec3(0.0);
+    }
+
+    if (id == CLOCKFACE_ID)
+    {
+        col = vec3(1.0, 0.95, 0.85);
 
         float r = length(uv);
         float a = atan(uv.y, uv.x);
-        //r *= cos(a*12.0);
-        bool inRadius = r > 0.3 && r < 0.35;
-        bool inAngle =  a > 0.0 && a < 0.1;
-        if( inAngle && inRadius )
+
+        //Tick markers
         {
-            col = vec3(0.0, 0.0, 0.0);
+            bool inRadius = r > 0.26 && r < 0.325;
+            if (cos(a * 12.0) > 0.97 && inRadius)
+            {
+                col = vec3(0.0);
+            }
         }
 
-        //Divide clock into pizza slices
-        //float r = cos(atan(uv.y, uv.x)*12.0);
-        //col *= smoothstep(r+0.01, r, length(uv));
-
-        //float r = cos(atan(uv.y, uv.x)*12.0);
-        //col *= smoothstep(r, r+0.01, (uv.y));
-
-        //vec2 q = floor(uv*12.0);
-        //float r = mod(q.x+q.y, 2.0);
-        //col *= r;
-
-        //float r = 0.2 + 0.1*cos(atan(uv.y, uv.x)*12.0);
-        //col *= smoothstep(r,r+0.01, length(uv));
-
-        if (abs(uv.x- 0.24) < 0.02 && abs(uv.y) < 0.02)
-        {
-        //    col = vec3(0.0);
-        }
     }
 
     return col;
