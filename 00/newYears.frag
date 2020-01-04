@@ -1,5 +1,13 @@
+/*
+    Sunday Shader: 1/52 "The second after Midnight"
+    New years resolution:make a shader every week & upload them on Sunday.
+    Yeah this one is pretty simple but you gotta start somewhere.
+    Suggestions, feedback & help is always welcome :D
+
+*/
+
 #define INV_GAMMA 0.454545
-#define AA 2
+#define AA 4
 #define M_PI 3.1415926535
 
 #define CLOCKFACE_ID 1.0f
@@ -9,25 +17,25 @@
 #define BOX_SIZE vec2(0.0025, 0.17)
 
 #define ONETOZERO(num) (num + 1.0f) / 2.0f
-
 #define DEBUGCOL vec3(1.0, 0.0,1.0)
+
 /*Game Plan:
     Todo
-    [ ] Hand strikes twelve
-    [ ] Fireworks from behind the clock
 
     In progress
-    - [ ] Moving the clock hands
 
     Done
     - [x] Draw clock face
     - [x] Mark the 12 hours 
+    - [x] Background
     - [x] Clock hands
+    - [x] Moving the clock hands
 
-    Nice to haves
+    Maybe next time
     [ ] Draw Roman Numerals
-    [ ] Star background
+    [ ] Fireworks from behind the clock
     [ ] Buildings w/ lights
+    [ ] Hand strikes twelve
 */
 
 float
@@ -49,20 +57,20 @@ Map(vec2 uv)
 
     vec2 trans = vec2(0.0, -0.12);
     vec2 bigHand = uv - vec2(0.0, 0.12) - trans;
-    float a = M_PI* sin(iTime);
+    float a = M_PI* (-iTime / 60.0);
     mat2 rot = mat2(cos(a), sin(a), -sin(a), cos(a));
     bigHand = bigHand * (rot) + trans  ;
 
-    trans = vec2(0.0, -0.12);
-    vec2 littleHand = uv - vec2(0.0, 0.12) - trans;
-    a = M_PI* sin(iTime);
+    trans = vec2(0.0, -0.09);
+    vec2 littleHand = uv - vec2(0.0, 0.09) - trans;
+    a = M_PI* (-iTime / (60.0 * 60.0));
     rot = mat2(cos(a), sin(a), -sin(a), cos(a));
-    littleHand = littleHand * (rot) + trans  ;
+    littleHand = littleHand * (rot) + trans;
 
     //If you're inside the sdf, return it's ID
     res = (sdCircle(uv - vec2(0.0, 0.0), CLOCKFACE_RADIUS) <= 0.0) ? CLOCKFACE_ID : res;  
     res = (sdBox(bigHand, BOX_SIZE) <= 0.0) ? BOX_ID : res;  
-    res = (sdBox(littleHand, vec2(0.01, 0.1)) <= 0.0) ? BOX_ID : res;  
+    res = (sdBox(littleHand, vec2(0.0025, 0.12)) <= 0.0) ? BOX_ID : res;  
     res = (sdCircle(uv - vec2(0.0, 0.0), 0.01) <= 0.0) ? 3.0f : res;  
 
     return res;
@@ -71,24 +79,38 @@ Map(vec2 uv)
 vec3
 Shading(vec2 uv, float id)
 {
+    float r = length(uv);
+    float a = atan(uv.y, uv.x);
+
     vec3 col;
     //Default case
     if (id  == -1.0f)
     {
-        col = DEBUGCOL;
+        bool inRadius = r > 0.36 && r < 0.37;
+        bool inAngle = true;
+        bool inCircle = inRadius && inAngle;
+
+        if (inCircle)
+        {
+            col = vec3(0.831, 0.686, 0.216);
+        }
+        else 
+        {
+            col = vec3(0.5)* (uv.y + 0.3);
+            col = pow(col, vec3(2.0));
+        }
+
     }
 
     if (id == BOX_ID)
     {
-        col = vec3(0.0);
+        col = vec3(0.0, 0.0, 0.0);
     }
 
     if (id == CLOCKFACE_ID)
     {
         col = vec3(1.0, 0.95, 0.85);
 
-        float r = length(uv);
-        float a = atan(uv.y, uv.x);
 
         //Tick markers
         {
@@ -112,8 +134,6 @@ Render(vec2 uv)
 
     //Shading
     vec3 col = Shading(uv,id);
-
-    //Post processing
 
     return col;
 }
