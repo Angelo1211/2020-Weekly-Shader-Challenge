@@ -6,16 +6,17 @@
 /*Game Plan:
     Todo
     - [ ] UV coordinate color top
-    - [ ] Something to raise the cake so It ain't on the ground
-    - [ ] Wood floring
-    - [ ] Raspberries 
-    - [ ] Add cake shape
+    - [ ] UV coordinate color top
+    - [ ] Candles
+    - [ ] Weird coloured balls on the wall sides
 
     In Progress
-    - [ ] 
+    - [ ] Modify shape of the base to look like a wine glass
 
     Done
     - [x] Basic SDF Renderer
+    - [x] Add cake shape
+    - [x] Something to raise the cake so It ain't on the ground
 
     Nice To Haves
     - [ ] 
@@ -28,6 +29,29 @@
 
 #define GROUND_ID 0.0
 #define SPHERE_ID 1.0
+#define CAKE_ID 2.0
+#define BASE_ID 3.0
+
+float 
+sdRoundedCylinder( vec3 p, float ra, float rb, float h )
+{
+    vec2 d = vec2( length(p.xz)-2.0*ra+rb, abs(p.y) - h );
+    return min(max(d.x,d.y),0.0) + length(max(d,0.0)) - rb;
+}
+
+float 
+sdCakeHolder(vec3 p, float r, float h )
+{
+    float rad = r;
+    rad -= 60.0 * -(pow(p.y, 2.0));
+    rad *= 0.3;
+    float d = length(p.xz) - rad; 
+
+    d = max(d, -p.y);
+    d = max(d, p.y - h );
+
+    return d;
+}
 
 float
 sdSphere(vec3 normDist, float r)
@@ -51,8 +75,10 @@ vec2
 Map(vec3 p)
 {
     vec2 res = vec2(1e10, -1.0);
-    res = uop(res, vec2(sdGround(p + 0.25), GROUND_ID));
-    res = uop(res, vec2(sdSphere(p - vec3(0.0, 0.1*sin(iTime), 0.0), 0.25), SPHERE_ID)); 
+    res = uop(res, vec2(sdGround(p), GROUND_ID));
+    res = uop(res, vec2(sdRoundedCylinder(p - vec3(0.0, 0.1, 0.0), 0.04, 0.002, 0.03), CAKE_ID));
+    res = uop(res, vec2(sdCakeHolder(p - vec3(0.0, 0.00, 0.0), 0.03, 0.07), BASE_ID));
+    //res = uop(res, vec2(sdSphere(p - vec3(0.0, 0.1, 0.0), 0.25), SPHERE_ID)); 
 
     return res;
 }
@@ -139,7 +165,7 @@ Render(vec3 ro, vec3 rd, vec2 uv)
         }
 
         //Lighting
-        vec3 L = normalize(vec3(1.0, 1.0, 0.0));
+        vec3 L = normalize(vec3(1.0, 0.4, 0.0));
         vec3 H = normalize(L-rd);
         vec3 lin = vec3(0.0);
         float diff = saturate(dot(L, N));
@@ -184,7 +210,8 @@ mainImage(out vec4 fragColor, in vec2 fragPos)
 {
     //General controls
     vec3 tot = vec3(0.0);
-    float radius = 1.0; 
+    float radius = 0.4; 
+    float height = 0.1;
     float time = iTime / 5.0;
 
     //Camera setup
@@ -192,10 +219,11 @@ mainImage(out vec4 fragColor, in vec2 fragPos)
     float roll = 0.0;
     vec3 ta = vec3(0.0, 0.0, 0.0);
 #if 1
-    vec3 ro = ta + vec3(radius * sin(time), 0.0, radius*cos(time));
+    vec3 ro = ta + vec3(radius * sin(time), height, radius*cos(time));
 #else
     vec3 ro = ta + vec3(0.0, 0.0, -radius);
 #endif
+
     mat3 cam = SetCamera(ro, ta, roll);
 #if AA > 1
     for(int i =0; i < AA; ++i)
