@@ -42,10 +42,13 @@ sdRoundedCylinder( vec3 p, float ra, float rb, float h )
 float 
 sdCakeHolder(vec3 p, float r, float h )
 {
+    float d = length(p.xz) - r; 
+    #if 0
     float rad = r;
     rad -= 60.0 * -(pow(p.y, 2.0));
     rad *= 0.3;
     float d = length(p.xz) - rad; 
+    #endif
 
     d = max(d, -p.y);
     d = max(d, p.y - h );
@@ -119,7 +122,7 @@ CalcSoftShadows(vec3 ro, vec3 rd)
 {
     float k = 2.0;
     float res = 1.0;
-    for(float t = 0.05; t < MAX_DIST;)
+    for(float t = 0.02; t < MAX_DIST;)
     {
         float h = Map(ro + t*rd).x;
 
