@@ -1,8 +1,8 @@
 #iChannel0 "self"
 
-#define GI_BOUNCES 3
+#define GI_BOUNCES 6
 #define MAX_DIST 200.0
-#define MAX_STEPS 500
+#define MAX_STEPS 2000
 #define MIN_DIST 0.0001 
 
 vec3
@@ -50,11 +50,13 @@ sdTop(vec3 p, vec4 n)
     float d;
 
     // n must be normalized
-    float d1 = dot(p,n.xyz) + n.w;
+    float dTop = dot(p, n.xyz) + n.w;
+    float dBot = dot(p, -n.xyz) + n.w;
+    d = max(dTop, dBot);
 
-    float d2 = sdBox(p - vec3(0.0, 0.0, 1.0), vec3(0.2, 1.0, 0.2));
+    float d2 = sdBox(p - vec3(0.0, 0.0, -0.4), vec3(0.1, 1.0, 0.1));
 
-    d = max(d1, -d2);
+    d = max(d, -d2);
 
     return d;
 }
@@ -83,38 +85,46 @@ SetCamera(vec3 eye, vec3 tar, float roll)
 #define LEFT_WALL_ID 1.0
 #define RIGHT_WALL_ID 2.0
 #define SPHERE_ID 3.0
+#define BOX_ID 4.0
 
-float
+vec2
 Map(vec3 p)
 {
     vec2 res = vec2(1e10, -1.0);
 
-    UOP(sdSphere(p - vec3(0.1, 0.0, -0.5), 0.1), SPHERE_ID);
+    UOP(sdSphere(p - vec3(0.2, 0.0, -0.5), 0.1), SPHERE_ID);
+    UOP(sdBox(p - vec3(-0.1, 0.0, -0.2), vec3(0.1, 0.3, 0.1)), BOX_ID);
+
     UOP(sdGround(p + 0.1), WALL_ID);
     UOP(sdPlane((p) - vec3(0.4, 0.0, 0.0), normalize(vec4(-1.0, 0.0, 0.0, 0.0))), LEFT_WALL_ID);
     UOP(sdPlane((p) - vec3(-0.4, 0.0, 0.0), normalize(vec4(1.0, 0.0, 0.0, 0.0))), RIGHT_WALL_ID);
     //Back wall
     UOP(sdPlane((p) - vec3(0.0, 0.0, 0.1), normalize(vec4(0.0, 0.0, -1.0, 0.0))), WALL_ID);
 
-    //UOP(  sdTop((p) - vec3(0.0, 0.4, 0.0), normalize(vec4(0.0, -1.0, 0.0, 0.0))), WALL_ID);
+    UOP(  sdTop((p) - vec3(0.0, 0.5, 0.0), normalize(vec4(0.0, 1.0, 0.0, 0.0))), WALL_ID);
 
-    return res.x;
+    return res;
 }
 
-float
+vec2
 RayMarch(vec3 ro, vec3 rd)
 {
-    float res = -1.0; 
+    vec2 res = vec2(-1.0, -1.0);
     float t = 0.001;
 
     for(int i =0 ; i < MAX_STEPS; ++i)
     {
-        float h = Map(ro + t *rd);
-        if(h < MIN_DIST || t > MAX_DIST ) break;
-        t += h;
+        vec2 hit = Map(ro + t *rd);
+        if(abs(hit.x) < MIN_DIST || t > MAX_DIST )
+        {
+            res = vec2(t, hit.y);
+            break;
+        }
+
+        t += hit.x;
     }
     
-    if (t < MAX_DIST) res = t;
+    //if (t < MAX_DIST) res = ;
 
     return res;
 }
@@ -123,9 +133,9 @@ vec3
 CalcNormal(vec3 p)
 {
     vec2 e = vec2(0.0001, 0.0);
-    return normalize(vec3(Map(p + e.xyy) - Map(p - e.xyy),
-                          Map(p + e.yxy) - Map(p - e.yxy),
-                          Map(p + e.yyx) - Map(p - e.yyx)
+    return normalize(vec3(Map(p + e.xyy).x - Map(p - e.xyy).x,
+                          Map(p + e.yxy).x - Map(p - e.yxy).x,
+                          Map(p + e.yyx).x - Map(p - e.yyx).x
     ));
 }
 
@@ -137,7 +147,7 @@ CalcShadow(vec3 ro, vec3 rd)
 
     for(int i = 0; i < MAX_STEPS; ++i)
     {
-        float h = Map(ro + rd *t);
+        float h = Map(ro + rd *t).x;
         if( h < MIN_DIST || t > MAX_DIST) break;
         t += h;
     }
@@ -162,6 +172,22 @@ rayOnSphere(float seed, vec3 nor)
     return normalize( nor + vec3(sqrt(1.0-u*u) * vec2(cos(a), sin(a)), u) );   
 }
 
+#define LEFT_WALL_ID 1.0
+#define RIGHT_WALL_ID 2.0
+#define SPHERE_ID 3.0
+
+vec3
+CalcMaterial(float id)
+{
+    vec3 col = vec3(1.0);
+    if(id == RIGHT_WALL_ID) 
+        col =  vec3(1.0, 0.0, 0.0);
+    if(id == LEFT_WALL_ID) 
+        col = vec3(0.0, 1.0, 0.0);
+
+    return col;
+}
+
 vec3
 Render(vec3 ro, vec3 rd, float randfloat)
 {
@@ -169,10 +195,14 @@ Render(vec3 ro, vec3 rd, float randfloat)
 
     float primaryRay = 0.0;
 
+    vec3 colorMask = vec3(1.0);
+
     //GI bounces
     for(int bounce = 0; bounce < GI_BOUNCES; ++bounce)
     {
-        float t = RayMarch(ro, rd);
+        vec2 res = RayMarch(ro, rd);
+        float t = res.x;
+        float id = res.y;
 
         //Early out if you hit the sky
         if(t < 0.0)
@@ -192,7 +222,8 @@ Render(vec3 ro, vec3 rd, float randfloat)
         vec3 N = CalcNormal(P);
 
         //Material
-        vec3 material = vec3(0.4);
+        vec3 material = CalcMaterial(id);
+        colorMask *= material;
 
         //Lighting
         vec3 iLight = vec3(0.0);
@@ -209,10 +240,10 @@ Render(vec3 ro, vec3 rd, float randfloat)
         }
 
         //Shading
-        iLight += 1.00 * sunDiff * vec3(1.0, 0.8, 0.6);
-        iLight += 1.00 * skyShadow * skyCol;
+        iLight += 4.00 * sunDiff * vec3(1.0, 0.8, 0.6);
+        iLight += 0.00 * skyShadow * skyCol;
         
-        tot += iLight ;
+        tot += iLight  * colorMask;
 
         rd = rayOnSphere(76.2 + 73.1*float(bounce) + randfloat + 17.7*float(iFrame), N);
 
@@ -234,9 +265,9 @@ mainImage(out vec4 fragColor, in vec2 fragPos)
 
     //Ray setup
     float roll = 0.0;
-    float nearP = 0.8;
-    vec3 ta = vec3(0.0, 0.0, 0.0);
-    vec3 ro = ta +  vec3(0.0, 0.2, -1.0);
+    float nearP = 0.85;
+    vec3 ta = vec3(0.0, 0.1, 0.0);
+    vec3 ro = vec3(0.0, 0.1, -1.0);
     mat3 cam = SetCamera(ro, ta, roll);
     vec3 rd = cam * normalize(vec3(uv, nearP));
 
