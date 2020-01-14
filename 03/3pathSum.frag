@@ -35,7 +35,24 @@ float
 sdBox(vec3 p, vec3 b)
 {
     vec3 q = abs(p) - b;
-    return length(max(q, 0.0));// + min(max(q.x,max(q.y,q.z)),0.0);
+    return length(max(q, 0.0)) + min(max(q.x,max(q.y,q.z)),0.0);
+}
+
+vec3
+opRep( in vec3 p, in vec3 c)
+{
+    vec3 q = mod(p+0.5*c,c)-0.5*c;
+    return q;
+}
+
+float
+sdTopBox(vec3 p, vec3 b)
+{
+    float d1 = sdBox(p, b); 
+    vec3 q = opRep(p, vec3(0.2));
+    float d2 = sdBox(p, vec3(0.1));
+
+    return max(d1,-d2);
 }
 
 #define UOP(dist, ID) res = uop(res, vec2(dist, ID))
@@ -53,14 +70,16 @@ Map(vec3 p)
 {
     vec2 res = vec2(1e10, -1.0);
 
-    UOP(sdSphere(p - vec3(00.3, -0.2, -0.1),      0.25), SPHERE_ID);
-    UOP(   sdBox(p - vec3(-0.2, -0.1, -0.2), vec3(0.1)), BOX_ID);
+    UOP(sdSphere(p - vec3(00.3, -0.2, 0.3),      0.25), SPHERE_ID);
+    vec3 q = p - vec3(-0.55, 0.0, -0.1);
+    q.z = mod(q.z + 0.2, 0.2) - 0.2;
+    UOP(   sdBox(q, vec3(EPS, 0.14, EPS)), BOX_ID);
 
     //Enclosing Box
-    UOP(sdBox(p - vec3(00.0, 00.3, 00.0), vec3(0.6, EPS , 0.6)), TOP_BOX_ID);
+    UOP(sdTopBox(p - vec3(00.0, 00.3, 00.0), vec3(0.6, EPS , 0.6)), TOP_BOX_ID);
     UOP(sdBox(p - vec3(00.0, -0.3, 00.0), vec3(0.6, EPS , 0.6)), BOTTOM_BOX_ID);
-    UOP(sdBox(p - vec3(00.6, 00.0, 00.0), vec3(EPS, 0.6 , 0.6)), LEFT_BOX_ID);
-    UOP(sdBox(p - vec3(-0.6, 00.0, 00.0), vec3(EPS, 0.6 , 0.6)), RIGHT_BOX_ID);
+    UOP(sdBox(p - vec3(00.6, 00.0, 00.0), vec3(EPS, 0.6 , 0.6)), RIGHT_BOX_ID);
+    UOP(sdBox(p - vec3(-0.6, 00.0, 00.0), vec3(EPS, 0.6 , 0.6)), LEFT_BOX_ID);
     UOP(sdBox(p - vec3(00.0, 00.0, 00.6), vec3(0.6, 0.6 , EPS)), BACK_BOX_ID);
 
     return res;
@@ -91,6 +110,19 @@ RayMarch(vec3 ro, vec3 rd)
     return res;
 }
 
+float
+CalcShadow(vec3 ro, vec3 rd)
+{
+    for(float t = 0.02; t < MAX_DIST;)
+    {
+        float hit = Map(ro + rd*t).x;
+        if(hit < MIN_DIST)
+            return 0.0;
+        t += hit;
+    }
+    return 1.0;
+}
+
 vec3
 CalcNormal(vec3 p)
 {
@@ -106,21 +138,63 @@ vec4
 GetMaterial(float id)
 {
     vec4 col = vec4(1.0, 1.0, 1.0, 0.0);
+    if(id == RIGHT_BOX_ID)
+    {
+        col = vec4(vec3(0.0, 1.0, 0.6), 0.2);
+    }
+    if(id == LEFT_BOX_ID)
+    {
+        col = vec4(vec3(1.0, 0.3, 0.0), 0.0);
+    }
+    if(id == TOP_BOX_ID)
+    {
+        //col = vec4(vec3(1.0, 1.0, 1.0), 1.0);
+    }
+    if(id == BOTTOM_BOX_ID)
+    {
+
+    }
+    if(id == BOX_ID)
+    {
+        col = vec4(vec3(1.0), 1.0);
+    }
+    if(id == SPHERE_ID)
+    {
+        col = vec4(vec3(1.0), 0.0);
+    }
 
     return col;
 }
 
+vec3
+rayOnHemisphere(float seed, vec3 nor)
+{
+    float u = hash( 78.233 + seed);
+    float v = hash( 10.873 + seed);
+
+    float a = 6.2831853 * v;
+    u = 2.0*u - 1.0;
+    return normalize( nor + vec3(sqrt(1.0-u*u) * vec2(cos(a), sin(a)), u) );   
+}
+
 vec3 skyCol = vec3(0.9, 0.8, 1.0);
 
-#define GI_BOUNCES 1
+#define GI_BOUNCES 3
 vec3
 Render(vec3 ro, vec3 rd, float seed)
 {
     //Tallying variables
-    vec3 tot, col; 
+    vec3 tot; 
 
     //Original values
-    vec3 oro, ord;
+    vec3 oro = ro;
+    vec3 ord = rd;
+
+    vec3 rayColor = vec3(1.0);
+    vec3 sunDir = normalize(vec3(0.2, 1.0, 0.3));
+    vec3 sunCol = 1.0*vec3(1.2,0.9,0.7);
+
+    float firstBounce = 0.0;
 
     //Global Illumination ray bounce 4 solids
     for(int bounce = 0; bounce < GI_BOUNCES; ++bounce)
@@ -129,6 +203,7 @@ Render(vec3 ro, vec3 rd, float seed)
         vec2 res = RayMarch(ro, rd);
         float t = res.x;
         float id = res.y;
+        float emissivity;
 
         if(id < 0.0)
         {
@@ -138,6 +213,7 @@ Render(vec3 ro, vec3 rd, float seed)
             }
             break;
         }
+        if( bounce==0 ) firstBounce = t;
 
         //Geometry
         vec3 P = ro + t*rd;
@@ -145,22 +221,54 @@ Render(vec3 ro, vec3 rd, float seed)
 
         //Material
         vec4 material = GetMaterial(id);
+        rayColor *= material.xyz;
+        emissivity = material.w;
         
-
         //Lighting
+        vec3 iLight = vec3(0.0);
+        vec3 indirectLight = rayColor * emissivity;
+        float sunDif =  max(0.0, dot(sunDir, N));
+        float sunSha = 1.0;
+        if( sunDif > 0.00001 )
+             sunSha = CalcShadow( P + N*0.1, sunDir);
+        iLight += sunCol * sunDif * sunSha;
 
         //Shadowing
 
         //Shading
-        col = N;
+        iLight += indirectLight;
 
-        tot += col;
+        tot += iLight;
 
         //GI ray re-positioning
         ro = P;
+        vec3 randomRay = rayOnHemisphere(76.2 + 73.1*float(bounce) + seed + 17.7*float(iFrame), N);
+        if(id == SPHERE_ID)
+        {
+            float rough = 0.1;
+            rd = (1.0 - rough)*reflect(rd, N) + rough*randomRay;
+        }
+        else
+        {
+            rd = randomRay;
+        }
+
     }
 
-    //Volumetrics
+    // volumetrics
+    float dt = 0.5;
+    float density = 0.0;
+
+#define STEPS 5
+    for( int i=0; i<STEPS; i++ )
+    {   
+        float rand = hash(seed+1.31+13.731*float(i)+float(iFrame)*7.773);
+        float t = clamp(0.0 + (firstBounce * rand), 0.5, firstBounce);
+        vec3 pos = oro + ord*t;
+        density += dt*CalcShadow( pos, sunDir );
+    }
+    tot += vec3(0.3)*pow(density,2.0)*sunCol*0.4;   //Volumetrics
+
 
     return tot;
 }
