@@ -49,8 +49,8 @@ float
 sdTopBox(vec3 p, vec3 b)
 {
     float d1 = sdBox(p, b); 
-    vec3 q = opRep(p, vec3(0.2));
-    float d2 = sdBox(p, vec3(0.1));
+    vec3 q = opRep(p, vec3(0.8));
+    float d2 = sdBox(q, vec3(0.08));
 
     return max(d1,-d2);
 }
@@ -230,7 +230,7 @@ Render(vec3 ro, vec3 rd, float seed)
         float sunDif =  max(0.0, dot(sunDir, N));
         float sunSha = 1.0;
         if( sunDif > 0.00001 )
-             sunSha = CalcShadow( P + N*0.1, sunDir);
+             sunSha = CalcShadow( P + N*0.001, sunDir);
         iLight += sunCol * sunDif * sunSha;
 
         //Shadowing
@@ -263,7 +263,7 @@ Render(vec3 ro, vec3 rd, float seed)
     for( int i=0; i<STEPS; i++ )
     {   
         float rand = hash(seed+1.31+13.731*float(i)+float(iFrame)*7.773);
-        float t = clamp(0.0 + (firstBounce * rand), 0.5, firstBounce);
+        float t = clamp((firstBounce * rand), 0.5, firstBounce);
         vec3 pos = oro + ord*t;
         density += dt*CalcShadow( pos, sunDir );
     }
@@ -284,7 +284,7 @@ mainImage(out vec4 fragColor, in vec2 fragPos)
     vec2 uv = ((fragPos + offset) - 0.5*iResolution.xy)/ iResolution.y;
 
     //Camera setup
-    float nearP = 1.0;
+    float nearP = 0.9;
     float roll = 0.0;
     vec3 ta = vec3(0.0, 0.0, 0.0);
     vec3 ro = ta + vec3(0.0, 0.0, -1.0);
