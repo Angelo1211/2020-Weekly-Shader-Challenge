@@ -82,9 +82,7 @@ sdCircle(vec3 p, float r, float t)
 #define BACK_ID 6.0
 #define FRONT_ID 7.0
 
-#define WITNESS_TOP 8.0
-#define WITNESS_BODY 9.0
-#define WITNESS_END 10.0
+#define WITNESS_ID 8.0
 
 #define EPSI 0.005
 
@@ -105,9 +103,13 @@ Map(vec3 p)
     UOP(sdBox(p - vec3(00.0, 00.0, 01.0), vec3(01.0, 01.0, EPSI)), BACK_ID);
 
     //Witness Symbol
-    //UOP(sdCircle(p - vec3(-0.5, 00.5, 01.0), 0.1, 0.1), WITNESS_TOP);
-    UOP(   sdBox(p - vec3(-0.5, 00.5, 01.0), vec3(0.085, 0.085, EPSI )), WITNESS_TOP);
-
+    float h = 0.4;
+    float d = 1.0;
+    float p1 = 0.05;
+    float size = 1.2;
+    UOP(sdCircle(p - vec3(-0.7 + p1, h, d), 0.14*size, EPSI), WITNESS_ID);
+    UOP(   sdBox(p - vec3(-0.0 + p1, h, d), vec3(0.7, 0.07*size, EPSI )), WITNESS_ID);
+    UOP(sdCircle(p - vec3(00.7 + p1, h, d), 0.07*size, EPSI), WITNESS_ID);
 
     return res;
 }
@@ -173,47 +175,44 @@ GetMaterial(vec3 p, vec3 n, float id)
     }
     else if(id == BOTTOM_ID)
     {
-
+        // vec2 tile = floor(p.xz * 4.0);
+        // float isTile = mod(tile.x + tile.y, 2.0);
+        // mat.color.xyz = vec3(1.0, 1.0, 1.0) * isTile;
+        mat.color.xyz = vec3(0.8, 0.9, 1.1);
+        //mat.properties.x = 0.5;  //Emissive 
+        mat.properties.y = 0.02;  //Roughness (0.0reflective, 1.0diffuse)
     }
     else if(id == TOP_ID)
     {
-        mat.color.xyz = vec3(1.0, 1.0, 1.0);
-        mat.properties.x = 0.0;  //Emissive 
-        mat.properties.y = 1.0;  //Roughness (0.0reflective, 1.0diffuse)
+        mat.color.xyz = vec3(0.8, 0.9, 1.1);
+        //mat.properties.x = 0.5;  //Emissive 
+        mat.properties.y = 0.006;  //Roughness (0.0reflective, 1.0diffuse)
     }
     else if(id == LEFT_ID)
     {
-        mat.color.xyz = vec3(0.0, 0.7, 1.0);
-        mat.properties.x = 0.5;  //Emissive 
-        mat.properties.y = 1.0;  //Roughness (0.0reflective, 1.0diffuse)
+        mat.color.xyz = vec3(0.8, 0.9, 1.1);
+        //mat.properties.x = 0.5;  //Emissive 
+        mat.properties.y = 0.005;  //Roughness (0.0reflective, 1.0diffuse)
 
     }
     else if(id == RIGHT_ID)
     {
-        mat.color.xyz = vec3(0.9, 0.4, 0.0);
-        mat.properties.x = 0.5;  //Emissive 
-        mat.properties.y = 1.0;  //Roughness (0.0reflective, 1.0diffuse)
+        mat.color.xyz = vec3(0.8, 0.9, 1.1);
+        //mat.color.xyz = vec3(1.0, 0.0, 0.0);
+        //mat.properties.x = 0.5;  //Emissive 
+        mat.properties.y = 0.00;  //Roughness (0.0reflective, 1.0diffuse)
 
     }
     else if(id == BACK_ID)
     {
-
     }
     else if(id == FRONT_ID)
     {
 
     }
-    else if(id == WITNESS_TOP)
+    else if(id == WITNESS_ID)
     {
-        mat.properties.x = 0.5;  //Emissive 
-    }
-    else if(id == WITNESS_BODY)
-    {
-        mat.properties.x = 0.5;  //Emissive 
-    }
-    else if(id == WITNESS_END)
-    {
-        mat.properties.x = 0.5;  //Emissive 
+        mat.properties.x = 1.5;  //Emissive 
     }
 
     return mat;
@@ -326,8 +325,8 @@ mainImage(out vec4 fragColor, in vec2 fragPos)
     float roll = 0.0;
     vec2 offset = -0.5 + vec2(hash(seed_ + 58.21), hash(seed_ + 18.61));
     vec2 uv = ((fragPos + offset) - 0.5*iResolution.xy) / iResolution.y;
-    vec3 ta = vec3(0.0, 0.2, 0.0);
-    vec3 ro = ta + vec3(0.0, 0.0, -0.97);
+    vec3 ta = vec3(0.0, 0.3, 0.0);
+    vec3 ro = ta + vec3(0.7, 0.0, -0.97);
     mat3 cam  = SetCamera(ro, ta, roll);
     vec3 rd = cam * normalize(vec3(uv, nearp));  
 
