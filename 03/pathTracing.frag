@@ -154,6 +154,11 @@ struct Material
     vec4 properties; // Emissive, Roughness, unused 3rd & 4th channel
 };
 
+vec3 palette( in float t, in vec3 a, in vec3 b, in vec3 c, in vec3 d )
+{
+    return a + b*cos( 6.28318*(c*t+d) );
+}
+
 Material
 GetMaterial(vec3 p, vec3 n, float id)
 {
@@ -212,6 +217,13 @@ GetMaterial(vec3 p, vec3 n, float id)
     }
     else if(id == WITNESS_ID)
     {
+        vec3 a = vec3(0.5, 0.5, 0.5);
+        vec3 b = vec3(0.5, 0.5, 0.5);
+        vec3 c = vec3(1.0, 1.0, 1.0);
+        vec3 d = vec3(0.0, 0.33, 0.67);
+
+        float t = p.x / 0.9;
+        mat.color.xyz = palette(t, a, b, c, d);
         mat.properties.x = 1.5;  //Emissive 
     }
 
@@ -290,7 +302,7 @@ Render(vec3 ro, vec3 rd)
 
         //Light accumulation
         lightAccumulation *= pow(0.65, float(bounce));
-        tot += lightAccumulation;
+        tot += lightAccumulation * rayCol;
 
 
         //Next bounce setup

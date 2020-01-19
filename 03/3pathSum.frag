@@ -1,9 +1,12 @@
 #iChannel0 "self"
 
 float
-hash(float seed)
+hash(float p)
 {
-    return fract(sin(seed)*43758.5453);
+    p = fract(0.011*p);
+    p *= p + 7.5;
+    p *= p + p;
+    return fract(p);
 }
 
 mat3
