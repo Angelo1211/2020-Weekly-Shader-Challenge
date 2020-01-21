@@ -2,6 +2,10 @@
 
 Hi! Here's a collection of the shaders I'm writing for my weekly shader challenge. I write most of these in visual studio code (using the [VSCode shadertoy extension](https://marketplace.visualstudio.com/items?itemName=stevensona.shader-toy)) and then upload them to shadertoy so people can check them out. Here's what I've done so far:
 
+### Week 3:
+[![A Star at Dawn](https://user-images.githubusercontent.com/11263073/72682913-527dc380-3aca-11ea-8d5e-1462e20d182e.png)](https://www.shadertoy.com/view/WlG3Rc)
+
+
 ### Week 2:
 [![Cornell Box](https://user-images.githubusercontent.com/11263073/72219453-357f4880-353e-11ea-9183-8573624c3e80.png)](https://www.shadertoy.com/view/3tKGW1)
 
