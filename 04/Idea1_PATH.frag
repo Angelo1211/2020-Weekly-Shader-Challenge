@@ -50,20 +50,26 @@ uop(vec2 a, vec2 b)
 #define SPHERE_ID 0.0
 #define GROUND_ID 1.0
 
+#define LEFT_ID 2.0
+#define RIGHT_ID 3.0
+#define STAIRS_ID 4.0
+#define RAIL_ID 5.0
+#define ROOM_ID 6.0
+
 #define EPSI 0.004
 vec2
 Map(vec3 p)
 {
     vec2 res = vec2(1e10, -1.0);
 
-    UOP(sdSphere(p - vec3(0.0, 0.2, 0.0), 0.25), SPHERE_ID);
-    UOP(sdBox(p - vec3(0.0, -0.1, 0.0), vec3(0.5,EPSI, 0.5)), GROUND_ID);
+    UOP(sdSphere(p - vec3(0.0, 0.2, 3.0), 0.25), SPHERE_ID);
+    UOP(sdBox(p - vec3(0.0, -0.1, 0.0), vec3(50.0,EPSI, 50.0)), GROUND_ID);
 
 
     return res;
 }
 
-#define MAX_STEPS 200
+#define MAX_STEPS 2000
 #define MIN_DIST 0.001
 #define MAX_DIST 20.0
 vec2
@@ -125,26 +131,36 @@ GetMaterialFromID(float id)
 vec3
 CosineWeightedRay(vec3 n , float seed)
 {
-#if 1
-    float u = hash(seed + 19.1945);
-    float v = hash(seed + 77.1719);
+    float u = hash(seed + 82.753);
+    float v = hash(seed + 18.902);
 
     float a = M_TAU * v;
     u = 2.0*u - 1.0;
 
-    return normalize(n + vec3(sqrt(1.0 - u*u) *vec2(cos(a), sin(a)), u ) );
 
-#else
-    float u = hash( 78.233 + seed);
-    float v = hash( 10.873 + seed);
-
-    float a = 6.2831853 * v;
-    u = 2.0*u - 1.0;
-    return normalize( n + vec3(sqrt(1.0-u*u) * vec2(cos(a), sin(a)), u) );   
-#endif
+    return normalize(n + vec3(sqrt(1.0 - u*u) * vec2(cos(a), sin(a)),u));
 }
 
+float
+CalcShadows(vec3 ro, vec3 rd)
+{
+    float k = 2.0;
+    float res = 1.0;
+    for(float t = 0.012; t < MAX_DIST;)
+    {
+        float h = Map(ro + t*rd).x;
+        
+        if(h < MIN_DIST) return 0.0;
+        res = min(res, h*k/t);
+        t += h;
+    }
+
+    return res;
+}
+
+vec3 sunCol = vec3(0.8, 0.7, 0.8);
 vec3 skyCol = vec3(0.0, 0.2, 0.8);
+vec3 sunDir = vec3(1.0, 1.3, 0.0);
 
 #define GI_BOUNCES 3
 vec3
@@ -189,12 +205,17 @@ Render(vec3 ro, vec3 rd)
 
         //Lighting
         vec3 lAcc =  vec3(0.0);
+        vec3 L = normalize(sunDir);
+        float diff = saturate(dot(N, L));
+
         vec3 indirect = rayCol * mat.emi;
 
         //Shadowing
+        float shadowed = CalcShadows(P, L);
 
         //Shading
-        lAcc = indirect;
+        lAcc += shadowed * diff * sunCol;
+        lAcc += indirect;
         tot += lAcc * rayCol;
 
         //Next Ray bounce
