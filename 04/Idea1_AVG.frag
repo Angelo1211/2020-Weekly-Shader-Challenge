@@ -1,4 +1,4 @@
-#iChannel0 "file://./04/pathTracing.frag"
+#iChannel0 "file://./04/Idea1_PATH.frag"
 
 #define INV_GAMMA 0.4545454
 

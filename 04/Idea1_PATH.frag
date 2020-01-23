@@ -39,6 +39,28 @@ sdSphere(vec3 p, float r)
     return length(p) - r; 
 }
 
+float sdCapsule( vec3 p, vec3 a, vec3 b, float r )
+{
+  vec3 pa = p - a, ba = b - a;
+  float h = clamp( dot(pa,ba)/dot(ba,ba), 0.0, 1.0 );
+  return length( pa - ba*h ) - r;
+}
+
+float
+sdRail(vec3 p)
+{
+    float d1 = sdCapsule(p - vec3(0.45, 0.2, 0.0), // pos
+                             vec3(0.0, 0.0, 00.0), // start
+                             vec3(0.0, 0.7, 05.0), // end
+                             0.05); // radius
+    float d2 = sdCapsule(p - vec3(1.0, 0.0, 10.0), // pos
+                             vec3(0.0, 0.0, 00.0), // start
+                             vec3(0.0, 0.0, 00.0), // end
+                             1.0); // radius
+
+    return d1;
+}
+
 vec2
 uop(vec2 a, vec2 b)
 {
@@ -48,22 +70,30 @@ uop(vec2 a, vec2 b)
 #define UOP(dist, id) res = uop(res, vec2(dist, id))
 
 #define SPHERE_ID 0.0
-#define GROUND_ID 1.0
 
+#define GROUND_ID 1.0
 #define LEFT_ID 2.0
 #define RIGHT_ID 3.0
 #define STAIRS_ID 4.0
 #define RAIL_ID 5.0
 #define ROOM_ID 6.0
+#define CEIL_ID 7.0
 
 #define EPSI 0.004
 vec2
 Map(vec3 p)
 {
     vec2 res = vec2(1e10, -1.0);
+    //UOP(sdSphere(p - vec3(0.0, 0.2, 3.0), 0.25), SPHERE_ID);
 
-    UOP(sdSphere(p - vec3(0.0, 0.2, 3.0), 0.25), SPHERE_ID);
-    UOP(sdBox(p - vec3(0.0, -0.1, 0.0), vec3(50.0,EPSI, 50.0)), GROUND_ID);
+    //Staircase walls
+    float o = -1.4; //side offset
+    float h = 2.0; // height of staircase walls
+    UOP(sdBox(p - vec3(0.0, -0.1, 0.0), vec3(50.0,EPSI, 50.0)), GROUND_ID); 
+    //UOP(sdBox(p - vec3(-0.0 + o, 0.0, 0.0), vec3(EPSI, h, 15.0)), LEFT_ID); 
+    UOP(sdBox(p - vec3(2.0 + o, 0.0, 0.0), vec3(EPSI, h, 15.0)), RIGHT_ID); 
+    //UOP(sdBox(p - vec3(0.0, 10.1, 0.0), vec3(20.0,EPSI, 25.0)), CEIL_ID); 
+    UOP(sdRail(p), RAIL_ID);
 
 
     return res;
@@ -71,7 +101,7 @@ Map(vec3 p)
 
 #define MAX_STEPS 2000
 #define MIN_DIST 0.001
-#define MAX_DIST 20.0
+#define MAX_DIST 50.0
 vec2
 RayMarch(vec3 ro, vec3 rd)
 {
@@ -238,8 +268,8 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
     float roll = 0.0;
     vec2 offset = - 0.5 + vec2(hash(rng_ + 10.852), hash(rng_ + 56.266));
     vec2 uv = ((fragCoord+offset) - 0.5*iResolution.xy)/iResolution.y;
-    vec3 ta = vec3(0.0, 0.2 ,0.0);
-    vec3 ro = ta + vec3(0.0, 0.0, -1.0);
+    vec3 ta = vec3(0.0, 0.6 ,0.0);
+    vec3 ro = vec3(0.0, 0.4, -1.0);
     mat3 cam = SetCamera(ro, ta, roll);
     vec3 rd = cam * normalize(vec3(uv, nearP));
 
