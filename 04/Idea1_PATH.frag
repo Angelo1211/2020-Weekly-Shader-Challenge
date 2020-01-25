@@ -3,6 +3,8 @@
 #define M_PI 3.1415926535
 #define M_TAU M_PI*2.0
 
+#define DEBUG 0
+
 float rng_ = 0.0;
 
 mat3
@@ -49,22 +51,67 @@ float sdCapsule( vec3 p, vec3 a, vec3 b, float r )
 float
 sdRail(vec3 p)
 {
-    float d1 = sdCapsule(p - vec3(0.45, 0.2, 0.0), // pos
-                             vec3(0.0, 0.0, 00.0), // start
-                             vec3(0.0, 0.7, 05.0), // end
-                             0.05); // radius
-    float d2 = sdCapsule(p - vec3(1.0, 0.0, 10.0), // pos
-                             vec3(0.0, 0.0, 00.0), // start
-                             vec3(0.0, 0.0, 00.0), // end
-                             1.0); // radius
+    vec3 r1A = vec3(0.0);
+    vec3 r1B = vec3(0.0, 0.0, 0.5);
+    float r1r = 0.02;
 
-    return d1;
+    vec3 r2B = vec3(0.0, 0.5, 04.0);
+
+    float r1 = sdCapsule(p - vec3(0.45, 0.2, 0.0), // pos
+                             r1A, // start
+                             r1B, // end
+                             r1r); // radius
+
+    float r2 = sdCapsule(p - vec3(0.45, 0.2, 00.0), // pos
+                             r1B, // start
+                             r2B, // end
+                             r1r); // radius
+    
+    r1 = min(r1, r2);
+
+    vec3 r3B = vec3(r2B.xy, r2B.z + 2.0);
+
+    r2 = sdCapsule(p - vec3(0.45, 0.2, 00.0), // pos
+                             r2B, // start
+                             r3B, // end
+                             r1r); // radius
+    r1 = min(r1, r2);
+
+    r1 = min(r1, r2);
+
+    vec3 r4B = vec3(r3B.x, r3B.y + r2B.y, r3B.z + 4.0);
+
+    r2 = sdCapsule(p - vec3(0.45, 0.2, 00.0), // pos
+                             r3B, // start
+                             r4B, // end
+                             r1r); // radius
+    r1 = min(r1, r2);
+
+    vec3 r5B = vec3(r4B.x, r4B.y, r4B.z + 4.0);
+
+    r2 = sdCapsule(p - vec3(0.45, 0.2, 00.0), // pos
+                             r4B, // start
+                             r5B, // end
+                             r1r); // radius
+    r1 = min(r1, r2);
+
+    return r1;
 }
 
+//union op
 vec2
 uop(vec2 a, vec2 b)
 {
     return (a.x < b.x) ? a : b;
+}
+
+//mirror op
+vec3
+mop(vec3 p)
+{
+    float off = 0.4;
+    p.x = abs(p.x + off) - off;
+    return p;
 }
 
 #define UOP(dist, id) res = uop(res, vec2(dist, id))
@@ -88,12 +135,12 @@ Map(vec3 p)
 
     //Staircase walls
     float o = -1.4; //side offset
-    float h = 2.0; // height of staircase walls
+    float h = 1.5; // height of staircase walls
     UOP(sdBox(p - vec3(0.0, -0.1, 0.0), vec3(50.0,EPSI, 50.0)), GROUND_ID); 
-    //UOP(sdBox(p - vec3(-0.0 + o, 0.0, 0.0), vec3(EPSI, h, 15.0)), LEFT_ID); 
-    UOP(sdBox(p - vec3(2.0 + o, 0.0, 0.0), vec3(EPSI, h, 15.0)), RIGHT_ID); 
-    //UOP(sdBox(p - vec3(0.0, 10.1, 0.0), vec3(20.0,EPSI, 25.0)), CEIL_ID); 
-    UOP(sdRail(p), RAIL_ID);
+    UOP(sdBox(p - vec3(-0.0 + o, 0.0, 0.0), vec3(EPSI, h, 15.0)), LEFT_ID); 
+    UOP(sdBox(p - vec3(2.0 + o, 0.0, 0.0), vec3(EPSI, h, 20.0)), RIGHT_ID); 
+    UOP(sdBox(p - vec3(0.0, 10.1, 0.0), vec3(20.0,EPSI, 25.0)), CEIL_ID); 
+    UOP(sdRail(mop(p)), RAIL_ID);
 
 
     return res;
@@ -141,7 +188,7 @@ struct Material
 };
 
 Material
-GetMaterialFromID(float id)
+GetMaterialFromID(float id, vec3 p, vec3 N)
 {
     Material mat;
     //Default
@@ -154,7 +201,28 @@ GetMaterialFromID(float id)
         mat.col = vec3(1.0, 1.0, 0.8);
         mat.emi = 0.6;
     }
+    else if(id == RAIL_ID) //TWEAK
+    {
+        float r = length(p.xy);
+        float a = atan(p.y, p.x);
 
+        float dir = dot(N, vec3(0.0, -1.0, 0.0));
+        if(abs(dir - 1.0) < 0.4)
+        {
+            mat.emi = 1.6;
+            mat.col = vec3(1.0, 0.0, 0.0);
+        }
+        else
+        {
+            mat.col = vec3(0.4);
+            mat.rough = 0.0;
+        }
+        if (abs(dir - 1.0) < 0.2)
+        {
+            mat.emi = 0.7;
+            mat.col = vec3(1.0);
+        }
+    }
     return mat;
 }
 
@@ -186,6 +254,24 @@ CalcShadows(vec3 ro, vec3 rd)
     }
 
     return res;
+}
+
+vec3
+CalcRayDirection(vec3 originalRd, vec3 reflectionDir, vec3 normal, float rough, float seed)
+{
+    vec3 newRd = vec3(0.0);
+    vec3 randDir = CosineWeightedRay(normal, seed);
+    if(rough >= 1.0)
+    {
+        newRd = randDir;
+    }
+    else
+    {
+        newRd = reflectionDir*(saturate(1.0 - rough)) + rough * randDir;
+        newRd = normalize(newRd);
+    }
+
+    return newRd;
 }
 
 vec3 sunCol = vec3(0.8, 0.7, 0.8);
@@ -230,7 +316,7 @@ Render(vec3 ro, vec3 rd)
         vec3 R = reflect(rd, N);
 
         //Material
-        Material mat = GetMaterialFromID(id);
+        Material mat = GetMaterialFromID(id, P, N);
         rayCol *=mat.col;
 
         //Lighting
@@ -244,14 +330,20 @@ Render(vec3 ro, vec3 rd)
         float shadowed = CalcShadows(P, L);
 
         //Shading
-        lAcc += shadowed * diff * sunCol;
-        lAcc += indirect;
-        tot += lAcc * rayCol;
+        #if DEBUG
+            tot = N;
+            break;
+        #else
+            lAcc += shadowed * diff * sunCol;
+            lAcc += indirect;
+            tot += lAcc * rayCol;
+        #endif
 
         //Next Ray bounce
         ro = P;
         float timeSeed =  76.2 + 73.1*float(bounce) + rng_ + 17.7*float(iFrame);
-        rd = CosineWeightedRay(N, timeSeed);
+        //rd = CosineWeightedRay(N, timeSeed);
+        rd = CalcRayDirection(rd, R, N, mat.rough, timeSeed);
     }
 
     return tot;
