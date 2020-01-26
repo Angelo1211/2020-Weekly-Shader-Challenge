@@ -35,12 +35,6 @@ sdBox(vec3 p, vec3 sides)
     return length(max(q, 0.0)) - min(max(q.z, max(q.x, q.y)), 0.0);
 }
 
-float
-sdSphere(vec3 p, float r)
-{
-    return length(p) - r; 
-}
-
 float sdCapsule( vec3 p, vec3 a, vec3 b, float r )
 {
   vec3 pa = p - a, ba = b - a;
@@ -51,11 +45,11 @@ float sdCapsule( vec3 p, vec3 a, vec3 b, float r )
 float
 sdRail(vec3 p)
 {
-    vec3 r1A = vec3(0.0);
-    vec3 r1B = vec3(0.0, 0.0, 0.5);
+    vec3 r1A = vec3(0.0, 0.0, -1.0);
+    vec3 r1B = vec3(0.0, 0.0, 0.1);
     float r1r = 0.02;
 
-    vec3 r2B = vec3(0.0, 0.5, 04.0);
+    vec3 r2B = vec3(0.0, 1.7, 04.0);
 
     float r1 = sdCapsule(p - vec3(0.45, 0.2, 0.0), // pos
                              r1A, // start
@@ -69,7 +63,7 @@ sdRail(vec3 p)
     
     r1 = min(r1, r2);
 
-    vec3 r3B = vec3(r2B.xy, r2B.z + 2.0);
+    vec3 r3B = vec3(r2B.xy, r2B.z + 0.5);
 
     r2 = sdCapsule(p - vec3(0.45, 0.2, 00.0), // pos
                              r2B, // start
@@ -77,9 +71,7 @@ sdRail(vec3 p)
                              r1r); // radius
     r1 = min(r1, r2);
 
-    r1 = min(r1, r2);
-
-    vec3 r4B = vec3(r3B.x, r3B.y + r2B.y, r3B.z + 4.0);
+    vec3 r4B = vec3(r3B.x, r3B.y + r2B.y + 0.20, r3B.z + 4.0);
 
     r2 = sdCapsule(p - vec3(0.45, 0.2, 00.0), // pos
                              r3B, // start
@@ -87,7 +79,7 @@ sdRail(vec3 p)
                              r1r); // radius
     r1 = min(r1, r2);
 
-    vec3 r5B = vec3(r4B.x, r4B.y, r4B.z + 4.0);
+    vec3 r5B = vec3(r4B.x, r4B.y , r4B.z + 4.0);
 
     r2 = sdCapsule(p - vec3(0.45, 0.2, 00.0), // pos
                              r4B, // start
@@ -96,6 +88,28 @@ sdRail(vec3 p)
     r1 = min(r1, r2);
 
     return r1;
+}
+
+float
+sdGround(vec3 p)
+{
+    float d = p.y;
+
+    float steps = floor(p.z* 5.0);
+
+    if ( p.z > 0.0 && p.z < 10.0)
+    {
+        d -= steps * 0.08 - 0.0 ;
+    }
+
+    //IQ steps https://www.shadertoy.com/view/ttBXRG
+    float i = floor(d);
+    float f = fract(d);
+    float k = 4.0;
+    float a = 0.5*pow(2.0*((f<0.5)?f:1.0-f), k);
+    f = (f<0.5)?a:1.0-a;
+    
+    return i+f;
 }
 
 //union op
@@ -109,14 +123,14 @@ uop(vec2 a, vec2 b)
 vec3
 mop(vec3 p)
 {
-    float off = 0.4;
-    p.x = abs(p.x + off) - off;
+    float off = 0.2;
+    p.x = abs(p.x + off)- off;
     return p;
 }
 
 #define UOP(dist, id) res = uop(res, vec2(dist, id))
 
-#define SPHERE_ID 0.0
+#define BOX_ID 0.0
 
 #define GROUND_ID 1.0
 #define LEFT_ID 2.0
@@ -131,15 +145,15 @@ vec2
 Map(vec3 p)
 {
     vec2 res = vec2(1e10, -1.0);
-    //UOP(sdSphere(p - vec3(0.0, 0.2, 3.0), 0.25), SPHERE_ID);
 
-    //Staircase walls
     float o = -1.4; //side offset
-    float h = 1.5; // height of staircase walls
-    UOP(sdBox(p - vec3(0.0, -0.1, 0.0), vec3(50.0,EPSI, 50.0)), GROUND_ID); 
-    UOP(sdBox(p - vec3(-0.0 + o, 0.0, 0.0), vec3(EPSI, h, 15.0)), LEFT_ID); 
-    UOP(sdBox(p - vec3(2.0 + o, 0.0, 0.0), vec3(EPSI, h, 20.0)), RIGHT_ID); 
-    UOP(sdBox(p - vec3(0.0, 10.1, 0.0), vec3(20.0,EPSI, 25.0)), CEIL_ID); 
+    float h = 300.5; // height of staircase walls
+    UOP(sdGround(p - vec3(0.0, -0.1, 0.0)), GROUND_ID); 
+    UOP(sdBox(p - vec3(0.02 + o, 0.0, 0.0), vec3(EPSI, h, 20.0)), LEFT_ID); 
+    UOP(sdBox(p - vec3(1.99 + o, 0.0, 0.0), vec3(EPSI, h, 20.0)), RIGHT_ID); 
+    UOP(sdBox(p - vec3(0.0, 09.1, 0.0), vec3(20.0,EPSI, 25.0)), CEIL_ID); 
+    UOP(sdBox(p - vec3(0.0, 10.1, 20.1), vec3(20.0,20.0, EPSI)), ROOM_ID); 
+    UOP(sdBox(p - vec3(o, 7.9, 17.0), vec3(0.1, 0.1, 0.2)), BOX_ID);
     UOP(sdRail(mop(p)), RAIL_ID);
 
 
@@ -187,6 +201,8 @@ struct Material
     vec3 pad;
 };
 
+vec3 roomCol = vec3(0.01, 0.02, 0.8);
+
 Material
 GetMaterialFromID(float id, vec3 p, vec3 N)
 {
@@ -196,12 +212,12 @@ GetMaterialFromID(float id, vec3 p, vec3 N)
     mat.emi = 0.0;
     mat.rough = 1.0; //1.0 is maximum roughness 0.0 is perfectly reflective
 
-    if(id == SPHERE_ID)
+    if(id == BOX_ID)
     {
-        mat.col = vec3(1.0, 1.0, 0.8);
-        mat.emi = 0.6;
+        mat.col = vec3(0.0, 0.8, 0.0);
+        mat.emi = 2.6;
     }
-    else if(id == RAIL_ID) //TWEAK
+    else if(id == RAIL_ID) 
     {
         float r = length(p.xy);
         float a = atan(p.y, p.x);
@@ -214,14 +230,23 @@ GetMaterialFromID(float id, vec3 p, vec3 N)
         }
         else
         {
-            mat.col = vec3(0.4);
-            mat.rough = 0.0;
+            mat.col = vec3(0.5);
+            mat.rough = 0.2;
         }
-        if (abs(dir - 1.0) < 0.2)
-        {
-            mat.emi = 0.7;
-            mat.col = vec3(1.0);
-        }
+    }
+    else if (id == ROOM_ID)
+    {
+        mat.col = roomCol;
+        mat.emi = 1.0;
+    }
+    else if(id == LEFT_ID || id == RIGHT_ID)
+    {
+        mat.col = vec3(0.27, 0.27, 0.27);
+        mat.rough = 0.6;
+    }
+    else if(id == CEIL_ID)
+    {
+        mat.rough = 0.5;
     }
     return mat;
 }
@@ -278,7 +303,7 @@ vec3 sunCol = vec3(0.8, 0.7, 0.8);
 vec3 skyCol = vec3(0.0, 0.2, 0.8);
 vec3 sunDir = vec3(1.0, 1.3, 0.0);
 
-#define GI_BOUNCES 3
+#define GI_BOUNCES 2
 vec3
 Render(vec3 ro, vec3 rd)
 {
@@ -290,12 +315,13 @@ Render(vec3 ro, vec3 rd)
     vec3 oro = ro;
     vec3 ord = rd;
     float depth = 0.0;
+    float t = 0.0;
 
     for(int bounce = 0; bounce < GI_BOUNCES; ++bounce)
     {
         //Scene traversal
         vec2 res = RayMarch(ro, rd);
-        float t = res.x;
+        t = res.x;
         float id = res.y;
 
         //First hit
@@ -309,6 +335,7 @@ Render(vec3 ro, vec3 rd)
             }
             break;
         }
+        if(bounce == 0) depth = t;
 
         //Geometry
         vec3 P = ro + t*rd;
@@ -334,7 +361,7 @@ Render(vec3 ro, vec3 rd)
             tot = N;
             break;
         #else
-            lAcc += shadowed * diff * sunCol;
+            //lAcc += shadowed * diff * sunCol;
             lAcc += indirect;
             tot += lAcc * rayCol;
         #endif
@@ -346,6 +373,9 @@ Render(vec3 ro, vec3 rd)
         rd = CalcRayDirection(rd, R, N, mat.rough, timeSeed);
     }
 
+    //Fog
+    tot = mix(tot, vec3(roomCol), 1.0 - exp(-0.0008*depth*depth));
+
     return tot;
 }
 
@@ -356,11 +386,11 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
     rng_ = hash(dot(vec2(12.9898, 78.233), fragCoord)+ 1113.1*float(iFrame));
 
     //Camera setup
-    float nearP = 1.0;
+    float nearP = 0.79;
     float roll = 0.0;
     vec2 offset = - 0.5 + vec2(hash(rng_ + 10.852), hash(rng_ + 56.266));
     vec2 uv = ((fragCoord+offset) - 0.5*iResolution.xy)/iResolution.y;
-    vec3 ta = vec3(0.0, 0.6 ,0.0);
+    vec3 ta = vec3(0.0, 0.6, 00.0);
     vec3 ro = vec3(0.0, 0.4, -1.0);
     mat3 cam = SetCamera(ro, ta, roll);
     vec3 rd = cam * normalize(vec3(uv, nearP));
