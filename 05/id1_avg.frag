@@ -13,6 +13,7 @@ mainImage(out vec4 fragColor, in vec2 fragPos)
         col /= float(iFrame);
     }
 
-    col = pow(col, vec3(INV_GAMMA));
+    col *= 2.5;// Exposure
+    col = pow(col, vec3(INV_GAMMA)); //Gamma correction
     fragColor = vec4(col, 1.0);
 }   

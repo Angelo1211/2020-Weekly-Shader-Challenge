@@ -23,13 +23,6 @@ sdBox( vec3 p, vec3 b )
   return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0);
 }
 
-float
-sdVerticalCapsule( vec3 p, float h, float r )
-{
-    p.y -= clamp( p.y, 0.0, h );
-    return length( p ) - r;
-}
-
 float 
 sdTorus( vec3 p, vec2 t )
 {
@@ -77,36 +70,13 @@ uop(vec2 a, vec2 b)
     return (a.x < b.x) ? a : b;
 }
 
-vec3
-opTwist(in vec3 p )
-{
-    const float k = 40.0; // or some other amount
-    float c = cos(k*p.y);
-    float s = sin(k*p.y);
-    mat2  m = mat2(c,-s,s,c);
-    vec3  q = vec3(m*p.xz,p.y);
-    return q;
-}
-
-float
-sdCandle(vec3 p)
-{
-    vec3 q = opTwist(p);
-    float d1 = sdVerticalCapsule(q, 0.2, 0.16);
- //- vec3(0.0f, 0.08f, -0.15f)
-
-    return d1;
-}
-
-
-#define WALL_ID 0.0
+#define DEF_ID 0.0
 #define LEFT_WALL_ID 1.0
 #define RIGHT_WALL_ID 2.0
-#define SPHERE_ID 3.0
-#define BOX_ID 4.0
 #define LIGHT_ID 5.0
 #define CAKE_ID 6.0
-#define CANDLE_ID 7.0
+#define TORUS_ID 7.0
+#define CHERRY_ID 8.0
 
 #define EPS 0.01
 vec2
@@ -115,21 +85,57 @@ Map(vec3 p)
     vec2 res = vec2(1e10, -1.0);
 
     //Interior
-    //UOP(sdSphere(p - vec3(0.2, 0.0, -0.5), 0.1), SPHERE_ID);
-    vec3 q = p;
-    q.xz = rotate(q.xz, -0.4);
-    //UOP(sdBox(q - vec3(-0.2, 0.0, -0.2), vec3(0.1, 0.3, 0.1)), BOX_ID);
+    if(p.x > -0.27 && p.x < 0.27) 
+    if(p.z > -0.6 && p.z < 0.5) 
+    if(p.y > -0.1 && p.y < 0.25) 
+    {
+        //Center cornerll box items
+        UOP(sdSphere(p - vec3(0.07, 0.13, -0.18), 0.04), DEF_ID);
+        vec3 q = p;
+        q.xz = rotate(q.xz, -0.4);
+        UOP(sdBox(q - vec3(-0.12, 0.0, -0.12), vec3(0.02, 0.2, 0.02)), DEF_ID);
 
-    //Cake
-    UOP(sdCandle(p), CANDLE_ID);
-    //UOP(sdRoundedCylinder(p - vec3(0.0f, 0.0f, -0.15f),  0.13, 0.012f, 0.08), CAKE_ID);
+        //Cake
+        vec3 pCake = p - vec3(0.0f, 0.0f, -0.15f);
+        float cakeRad = 0.13;
+        //cakeRad -= 0.0005*(0.5 + 0.5*sin(200.0 * p.y));
+        UOP(sdRoundedCylinder(pCake,  cakeRad, 0.012f, 0.08), CAKE_ID);
+
+        //Candle
+        vec3 pDecoration = pCake - vec3(0.0, 0.097, 0.0);   
+
+        //Candy Spheres
+        if(pDecoration.y > -0.01 && pDecoration.y < 0.058) //No need to evaluate this for every ray
+        {
+            float rSphere = 0.024;
+            float radius = 0.21;
+            float numElements = 8.0;
+            vec3 ring = pDecoration;
+            for(float i = 0.0; i < numElements; ++i){
+                float angle = 2.0 * M_PI * i / numElements; 
+                vec3 rotatedPos = ring - vec3(0.0 - radius*cos(angle), 0.0, -radius*sin(angle));
+                float tRad = 0.005;
+                tRad -= 0.0007*(0.5 + 0.5*sin(16.0 * atan(rotatedPos.x, rotatedPos.z)));
+                UOP(sdTorus(rotatedPos, vec2( 0.02, tRad)),TORUS_ID);
+                UOP(sdSphere(rotatedPos - vec3(0.0, rSphere, 0.0), rSphere ),CHERRY_ID);
+            }
+        }
+    }
 
     //Exterior box
-    UOP(sdBox(p - vec3(0.0, -0.1, 0.0), vec3(0.5, EPS, 1.0)), WALL_ID);
-    UOP(sdBox(p - vec3(-0.5, 0.2, 0.0), vec3(EPS, 0.5, 1.0)), LEFT_WALL_ID);
-    UOP(sdBox(p - vec3(0.5, 0.2, 0.0), vec3(EPS, 0.5, 1.0)), RIGHT_WALL_ID);
-    UOP(sdBox(p - vec3(0.0, 0.7, 0.0), vec3(0.5, EPS, 1.0)), LIGHT_ID);
-    UOP(sdBox(p - vec3(0.0, 0.0, 0.3), vec3(1.0, 1.0, EPS)), WALL_ID);
+    {
+        //Bottom wall
+        UOP(sdBox(p - vec3(0.0, -0.1, 0.0), vec3(0.5, EPS, 1.0)), DEF_ID);
+        UOP(sdBox(p - vec3(-0.5, 0.2, 0.0), vec3(EPS, 0.5, 1.0)), LEFT_WALL_ID);
+        UOP(sdBox(p - vec3(0.5, 0.2, 0.0), vec3(EPS, 0.5, 1.0)), RIGHT_WALL_ID);
+
+        //Ceiling wall
+        UOP(sdBox(p - vec3(0.0, 0.7, 0.0), vec3(0.5, EPS, 1.0)), DEF_ID);
+        UOP(sdBox(p - vec3(0.0, 0.7, 0.0), vec3(0.2, EPS, 0.2)), LIGHT_ID);
+
+        //Back wall
+        UOP(sdBox(p - vec3(0.0, 0.0, 0.3), vec3(1.0, 1.0, EPS)), DEF_ID);
+    }
 
     return res;
 }
@@ -170,19 +176,12 @@ CalcNormal(vec3 p)
 
 struct Material
 {
-    vec3 col; //r,g,b
+    vec3 col;
     float emi;
     float rough;
-    vec3 pad;
+    float fresnel;
+    vec2 pad;
 };
-
-#define WALL_ID 0.0
-#define LEFT_WALL_ID 1.0
-#define RIGHT_WALL_ID 2.0
-#define SPHERE_ID 3.0
-#define BOX_ID 4.0
-#define LIGHT_ID 5.0
-vec3 roomCol = vec3(0.01, 0.02, 0.8);
 
 Material
 GetMaterialFromID(float id, vec3 p, vec3 N)
@@ -192,36 +191,30 @@ GetMaterialFromID(float id, vec3 p, vec3 N)
     mat.col = vec3(1.0);
     mat.emi = 0.0;
     mat.rough = 1.0; //1.0 is maximum roughness 0.0 is perfectly reflective
+    mat.fresnel = 0.0;
+    if(id == DEF_ID) return mat; //fast path for default mat
 
-    if(id == BOX_ID)
+    if(id == CAKE_ID)
     {
-        //mat.col = vec3(0.0, 0.8, 0.0);
-        //mat.emi = 2.6;
-    }
-    else if(id == CAKE_ID)
-    {
-        mat.col = vec3(0.7, 0.3, 0.1);
-        //mat.emi = 0.4;
-    }
-    else if(id == WALL_ID)
-    {
+        mat.col = vec3(0.06, 0.04, 0.02);
     }
     else if(id == LEFT_WALL_ID)
     {
-        mat.col = vec3(1.0, 0.0, 1.0);
+        mat.col = vec3(1.0, 0., 1.0);
     }
     else if(id == RIGHT_WALL_ID)
     {
         mat.col = vec3(0.0, 1.0, 1.0);
     }
-    else if(id == SPHERE_ID)
-    {
-        mat.rough = 0.0;
-
-    }
     else if(id == LIGHT_ID)
     {
-        mat.emi = 0.6;
+        mat.emi = 1.6;
+    }
+    else if(id == CHERRY_ID)
+    {
+        mat.col = vec3(0.8, 0.0, 0.0);
+        mat.rough = 0.2;
+        mat.fresnel = 1.0;
     }
     return mat;
 }
@@ -234,7 +227,6 @@ CosineWeightedRay(vec3 N, float seed)
 
     float a = M_TAU*v;
     u = 2.0*u - 1.0;
-
 
     return(normalize(N + vec3(sqrt(1.0 - u*u)*vec2(cos(a), sin(a)), u)));
 }
@@ -257,7 +249,7 @@ CalcRayDirection(vec3 originalRd, vec3 reflectionDir, vec3 normal, float rough, 
     return newRd;
 }
 
-#define GI_BOUNCES 6
+#define GI_BOUNCES 4
 vec3
 Render(vec3 ro, vec3 rd)
 {
@@ -281,15 +273,16 @@ Render(vec3 ro, vec3 rd)
         Material mat = GetMaterialFromID(id, P, N); 
         rayCol *= mat.col;
         float emi = mat.emi;
+        float fresnel = mat.fresnel;
 
         //Lighting
         vec3 colAcc = vec3(0.0); 
         vec3 indirect = emi * rayCol;
-
-        //Shadowing
+        float fre = fresnel * pow( saturate(1.0+dot(N,rd)), 5.0 );
 
         //Shading
         colAcc += 1.00 * indirect;
+        colAcc += 0.07 * fre;
         tot += colAcc;
 
         //Next bounce ray Dir
@@ -318,7 +311,7 @@ mainImage(out vec4 fragColor, in vec2 fragPos)
     float roll = 0.0;
 
     float nearP = 0.75;
-    vec3 ta = vec3(0.0, 0.25, 0.0);
+    vec3 ta = vec3(0.0, 0.35, 0.0);
     vec3 ro = ta + vec3(0.0, 0.0, -1.0);
     mat3 cam = SetCamera(ro, ta, roll);
     vec2 uv = ((fragPos + offset) - 0.5*iResolution.xy) / iResolution.y;
