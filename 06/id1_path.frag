@@ -1,28 +1,7 @@
+#include "./common.glsl"
 #iChannel0 "self"
-#iChannel1 "file://./06/organic3.jpg"
-
-#define M_PI 3.1415926535
-#define M_TAU M_PI*2.0
 
 float seed_;
-
-vec2 
-rotate(vec2 a, float b)
-{
-    float c = cos(b);
-    float s = sin(b);
-    return vec2(
-        a.x * c - a.y * s,
-        a.x * s + a.y * c
-    );
-}
-
-float 
-sdBox( vec3 p, vec3 b )
-{
-  vec3 q = abs(p) - b;
-  return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0);
-}
 
 float 
 sdTorus( vec3 p, vec2 t )
@@ -37,15 +16,6 @@ sdRoundedCylinder( vec3 p, float ra, float rb, float h )
     return min(max(d.x,d.y),0.0) + length(max(d,0.0)) - rb;
 }
 
-float
-hash(float p)
-{
-    p = fract(p *0.012);
-    p *= p + 7.5;
-    p *= p + p;
-    return fract(p);
-}
-
 mat3
 SetCamera(vec3 ro, vec3 ta, float roll)
 {
@@ -58,18 +28,6 @@ SetCamera(vec3 ro, vec3 ta, float roll)
     return mat3(r, u, f);
 }
 
-float
-sdSphere(vec3 p, float r)
-{
-    return length(p) - r;
-}
-
-#define UOP(dist, ID) res = uop(res, vec2(dist, ID))
-vec2
-uop(vec2 a, vec2 b)
-{
-    return (a.x < b.x) ? a : b;
-}
 
 #define DEF_ID 0.0
 #define LEFT_WALL_ID 1.0
@@ -233,17 +191,6 @@ GetMaterialFromID(float id, vec3 p, vec3 N)
     return mat;
 }
 
-vec3
-CosineWeightedRay(vec3 N, float seed)
-{
-    float u = hash(seed + 70.93);
-    float v = hash(seed + 21.43);
-
-    float a = M_TAU*v;
-    u = 2.0*u - 1.0;
-
-    return(normalize(N + vec3(sqrt(1.0 - u*u)*vec2(cos(a), sin(a)), u)));
-}
 
 vec3
 CalcRayDirection(vec3 originalRd, vec3 reflectionDir, vec3 normal, float rough, float seed)

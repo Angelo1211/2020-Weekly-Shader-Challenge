@@ -1,5 +1,5 @@
 #iChannel0 "file://./06/id1_path.frag"
-#define INV_GAMMA  0.454545
+#include "./common.glsl"
 
 void
 mainImage(out vec4 fragColor, in vec2 fragPos)
