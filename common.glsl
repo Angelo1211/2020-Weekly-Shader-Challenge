@@ -2,6 +2,9 @@
 #define M_PI acos(-1.0)
 #define M_TAU M_PI*2.0
 
+//Comment this out if running this file on shadertoy
+//#define SHADERTOY 
+
 //------------------------------------------------------------------------------------
 //----------------------------------SDF Shaping functions-----------------------------
 float
@@ -52,6 +55,20 @@ hash(float seed)
 }
 
 //------------------------------------------------------------------------------------
+//----------------------------------Camera functions------------------------------
+mat3
+SetCamera(vec3 ro, vec3 ta, float roll)
+{
+    vec3 f, temp, r, u;
+    f = normalize(ta - ro);
+    temp = normalize(vec3(sin(roll), cos(roll), 0.0));
+    r = normalize(cross(temp, f));
+    u = normalize(cross(f, r));
+
+    return mat3(r, u, f);
+}
+
+//------------------------------------------------------------------------------------
 //----------------------------------Path Trace functions------------------------------
 vec3
 CosineWeightedRay(vec3 N, float seed)
@@ -64,3 +81,16 @@ CosineWeightedRay(vec3 N, float seed)
 
     return(normalize(N + vec3(sqrt(1.0 - u*u)*vec2(cos(a), sin(a)), u)));
 }
+
+//--------------------------------------------------------------------------------------
+//----------------------------------Post processing functions----------------------------
+#define GAMMA(col) col = pow(col, vec3(INV_GAMMA))
+
+
+//---------------------------------------------------------------------------------------- 
+//----------------------------------Basic functions---------------------------------------
+#ifdef SHADERTOY
+#define saturate(vol) clamp(col, 0.0, 1.0)
+#endif
+
+
