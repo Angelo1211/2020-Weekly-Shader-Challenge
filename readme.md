@@ -2,6 +2,9 @@
 
 Hi! Here's a collection of the shaders I'm writing for my weekly shader challenge. I write most of these in visual studio code (using the [VSCode shadertoy extension](https://marketplace.visualstudio.com/items?itemName=stevensona.shader-toy)) and then upload them to shadertoy so people can check them out. I'm using a beefy GPU to render these, so ms count may vary. Here's what I've done so far:
 
+### Week 8:
+[![Imminent Doom](https://user-images.githubusercontent.com/11263073/75113789-996e5400-5648-11ea-8087-e187ee738e6f.png)](https://www.shadertoy.com/view/wtVSzm)
+
 ### Week 7:
 [![Starfield](https://user-images.githubusercontent.com/11263073/74598346-e0b47d80-5067-11ea-9b6d-42d9aa0ee13d.png)](https://www.shadertoy.com/view/wtcXWX)
 
