@@ -26,7 +26,7 @@ mandelbrot(vec2 uv, const int max_steps, float zoom, vec2 offset)
 
         if(length(Z) > 2.0)
         {
-            col += vec3(1.0, 0.0, 0.0);
+            col += vec3(1.0, 0.0, 1.0);
             break;
         }
     }
@@ -39,8 +39,8 @@ julia(vec2 uv, const int max_steps, float zoom, vec2 offset)
 {
     vec3 col = vec3(0.0);
 
-    vec2 C = offset * zoom;
-    vec2 Z  = uv ;
+    vec2 C = offset;
+    vec2 Z  = uv;
 
     for(int i = 0; i < max_steps; ++i)
     {
@@ -49,7 +49,7 @@ julia(vec2 uv, const int max_steps, float zoom, vec2 offset)
 
         if(length(Z) > 2.0)
         {
-            col += vec3(1.0, 0.0, 0.0);
+            col += vec3(1.0, 1.0, 1.0);
             break;
         }
     }
@@ -60,30 +60,56 @@ julia(vec2 uv, const int max_steps, float zoom, vec2 offset)
 void
 mainImage(out vec4 fragColor, in vec2 fragPos)
 {
+    float AR = iResolution.x / iResolution.y;
+    vec3 col;
     vec3 tot = vec3(0.0);
-    vec2 mouse = iMouse.xy / iResolution.xy;
-    mouse.x *= CELLS;
+    vec2 mouse = (iMouse.xy - 0.5*iResolution.xy) / iResolution.x;
+    //mouse.y = 1.0 - mouse.y;
+    //vec2 mouse = (iMouse.xy) / iResolution.xy;
 
     //AA for the extra niceness
     for(int i = 0; i < AA; ++i)
     for(int j = 0; j < AA; ++j)
     {
         vec2 offset = vec2(i, j) / float(AA) - 0.5;
-        vec2 uv2 = ((fragPos + offset) - 0.5*iResolution.xy ) / iResolution.y;
+
+        vec2 muv = ((fragPos + offset) - 0.5*iResolution.xy ) / iResolution.y;
         vec2 uv = ((fragPos + offset)) / iResolution.xy;
-        //float id = floor(uv.x*CELLS);
 
-        uv.x -= 1.00;
-        vec2 id = floor(uv* 2.5);
-        vec2 nUV = fract(uv * 2.5) - 0.5;
+        vec2 uv2 = uv;
+        uv2.x = 1.0 - uv2.x;
+        uv2 *= vec2(2.6, 2.6);
+        vec2 id = floor(uv2);
+        uv2 = vec2(1.0 - uv2.x, uv2.y);
+        vec2 juv = (fract(uv2) - 0.5);
+        juv.x *= AR;
 
-        const int max_steps = 50;
+        const int max_steps = 500;
         float zoom = 2.0;
-        vec2 mov = vec2(-1.0, 0.0);
-        vec2 movement =  mov + mouse;
+        vec2 mov = vec2(0.0);
+        vec2 movement = mouse.xy;
 
-        //tot += (id.y == 0.0 && id.x > -2.0) ? vec3(nUV, 0.0) :  mandelbrot(uv2, max_steps, zoom, mov);
-        tot += (id.y == 0.0 && id.x > -2.0) ? julia(nUV, max_steps, zoom, movement):  mandelbrot(uv2, max_steps, zoom, mov);
+        float inJulia = saturate(1.0 - id.y) * saturate(1.0 - id.x); 
+        float inMandelbrot = 1.0 - inJulia;
+
+        col = mandelbrot(muv, max_steps, zoom, vec2(0.0) ) * inMandelbrot;
+        col += mandelbrot(juv, max_steps, zoom, vec2(0.0)) * inJulia;
+        col += (length(muv - mouse.xy) < 0.02) ? vec3(1.0) : vec3(0.0);
+        //col += vec3(mouse.xy, 0.0) * inJulia;
+        //col += vec3(0.0, 1.0, 0.0) * inJulia;
+
+
+#if 0
+        float bound = 0.889;
+
+        bool mandelTopBound = muv.x > bound;
+        bool juliaTopBound = (juv.x) > bound;
+
+        col = ( (mandelTopBound) ? vec3(0.0, 0.0, 1.0) : vec3(0.0)) * inMandelbrot;
+        col += ( (juliaTopBound) ? vec3(1.0, 0.0, 0.0) : vec3(0.0)) * inJulia;
+#endif
+
+        tot += col;
     }
     tot /= float(AA*AA);
 
