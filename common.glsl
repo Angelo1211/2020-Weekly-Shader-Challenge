@@ -20,6 +20,12 @@ sdBox( vec3 p, vec3 b )
   return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0);
 }
 
+float
+sdGroundPlane(vec3 p)
+{
+    return p.y;
+}
+
 //------------------------------------------------------------------------------------
 //----------------------------------SDF Joining functions-----------------------------
 #define UOP(dist, ID) res = uop(res, vec2(dist, ID))
@@ -90,7 +96,7 @@ CosineWeightedRay(vec3 N, float seed)
 //---------------------------------------------------------------------------------------- 
 //----------------------------------Basic functions---------------------------------------
 #ifdef SHADERTOY
-#define saturate(vol) clamp(col, 0.0, 1.0)
+#define saturate(col) clamp(col, 0.0, 1.0)
 #endif
 
 
