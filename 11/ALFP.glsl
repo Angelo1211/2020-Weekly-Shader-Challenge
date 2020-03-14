@@ -1,12 +1,15 @@
 #include "./common.glsl"
 
-#define SPHERE_ID 0.0
+#define SATURN_ID 0.0
+#define MOON_ID 1.0
 vec2
 Map(vec3 p)
 {
     vec2 res = vec2(1e10, -1.0);
 
-    UOP(sdSphere(p - vec3(0.1, 0.1, 0.0), 0.25), SPHERE_ID);
+    UOP(sdSphere(p - vec3(0.2, 0.1, 0.0), 0.5), SATURN_ID);
+
+    UOP(sdSphere(p - vec3(0.1, 0.1, -0.6), 0.1), MOON_ID);
 
 
     return res;
@@ -48,6 +51,35 @@ CalcNormal(vec3 p)
 }
 
 vec3
+Material(float id, vec3 pos)
+{
+    vec3 col = vec3(0.0);
+
+    if(id == SATURN_ID )
+    {
+
+        if(abs(pos.x) < 0.0)
+        {
+            col = vec3(1.0, 1.0, 0.0);
+        }
+        else
+        {
+            col = vec3(1.0, 0.2, 0.0);
+        }
+
+
+
+    }
+
+    if(id == MOON_ID )
+    {
+        col = vec3(1.0);
+    }
+
+    return col;
+}
+
+vec3
 Render(vec3 ro, vec3 rd)
 {
     vec3 col = vec3(0.0);
@@ -67,20 +99,19 @@ Render(vec3 ro, vec3 rd)
         vec3 N = CalcNormal(P);
 
         //Material
-        col = vec3(1.0);
+        col = Material(id, P);
+        //col = vec3(1.0);
 
         //Lighting
         vec3 lin = vec3(0.0);
-        vec3 L = vec3(1.0, 1.0, 0.0);
+        vec3 L = vec3(-0.7, -0.2, -0.3);
         float diff = saturate(dot(L, N));
-
-        //Diffuse
-
 
         //Shadowing
 
         //Shading
         lin += 1.0 * diff * vec3(1.0, 1.0, 1.0);
+        //lin += N;
         col *= lin;
     }
     //Volumetric
