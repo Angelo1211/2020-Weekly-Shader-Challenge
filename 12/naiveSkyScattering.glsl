@@ -1,8 +1,8 @@
 #include "./common.glsl"
 
 //Raymarcher vars
-#define MAX_STEPS 200
-#define MIN_DIST 0.001
+#define MAX_STEPS 2000
+#define MIN_DIST 0.0001
 #define MAX_DIST 20000.0
 
 //Map vars
@@ -10,7 +10,7 @@
 #define SPHERE_ID 1.0
 
 //Common vars
-vec3 sunDir = vec3(0.0, 1.0, 0.0);
+vec3 sunDir = normalize(vec3(1.0, 1.0, 0.0));
 const float earthRadius = 6360e3; // (m)
 const float atmosphereRadius = 6420e3; // (m)
 float time;
@@ -19,8 +19,8 @@ vec2
 Map(vec3 p)
 {
     vec2 res = vec2(1e10, -1.0);
-    UOP(sdSphere(p - vec3(0.0), earthRadius), EARTH_ID);
-    //UOP(sdSphere(p - vec3(0.1, earthRadius, 0.0), 0.25), SPHERE_ID);
+    UOP(sdSphere(p - vec3(0.0, -0.3, 0.0), earthRadius), EARTH_ID);
+    UOP(sdSphere(p - vec3(0.1, earthRadius, 0.0), 0.25), SPHERE_ID);
 
     return res;
 }
@@ -46,6 +46,16 @@ RayMarch(vec3 ro, vec3 rd)
 }
 
 vec3
+CalcNormal(vec3 p)
+{
+    vec2 e = vec2(0.05, 0.0);
+    return normalize(vec3( Map(p + e.xyy).x - Map(p - e.xyy).x,
+                           Map(p + e.yxy).x - Map(p - e.yxy).x,
+                           Map(p + e.yyx).x - Map(p - e.yyx).x
+    ));
+}
+
+vec3
 Render(vec3 ro, vec3 rd)
 {
     //Ray Results
@@ -60,22 +70,24 @@ Render(vec3 ro, vec3 rd)
     {
         //Geometry
         vec3 P = ro + t*rd;
+        vec3 N = CalcNormal(P);
 
         //Material
         col = vec3(1.0);
 
         //Lighting
         vec3 lin = vec3(0.0);
+        float diff = saturate(dot(sunDir, N));
 
         //Shadowing
 
         //Shading
-        lin += P;
+        lin += diff;
         col *= lin;
     }
-    else
+    else //Sky
     {
-
+        col = vec3(0.0);
     }
     //Volumetrics?
 
