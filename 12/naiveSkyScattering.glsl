@@ -1,9 +1,14 @@
 #include "./common.glsl"
 
+/*
+    Reading this today:
+*/
+//https://www.scratchapixel.com/lessons/procedural-generation-virtual-worlds/simulating-sky/simulating-colors-of-the-sky
+
 //Raymarcher vars
-#define MAX_STEPS 2000
+#define MAX_STEPS 200
 #define MIN_DIST 0.0001
-#define MAX_DIST 20000.0
+#define MAX_DIST 2000.0
 
 //Map vars
 #define EARTH_ID 0.0
@@ -19,9 +24,8 @@ vec2
 Map(vec3 p)
 {
     vec2 res = vec2(1e10, -1.0);
-    UOP(sdSphere(p - vec3(0.0, -0.3, 0.0), earthRadius), EARTH_ID);
-    UOP(sdSphere(p - vec3(0.1, earthRadius, 0.0), 0.25), SPHERE_ID);
-
+    //UOP(sdSphere(p - vec3(0.1, 0.1, 0.0), 0.25), SPHERE_ID);
+    UOP(sdSphere(p - vec3(0.0, -earthRadius - 0., 0.0), earthRadius), EARTH_ID);
     return res;
 }
 
@@ -35,7 +39,7 @@ RayMarch(vec3 ro, vec3 rd)
     {
         vec2 hit = Map(ro +t*rd);
 
-        if(abs(hit.x) < t*MIN_DIST)
+        if((hit.x) < MIN_DIST)
         {
             res = vec2(t, hit.y);
             break;
@@ -48,11 +52,21 @@ RayMarch(vec3 ro, vec3 rd)
 vec3
 CalcNormal(vec3 p)
 {
-    vec2 e = vec2(0.05, 0.0);
+    /*
+    vec2 e = vec2(0.3, 0.0);
     return normalize(vec3( Map(p + e.xyy).x - Map(p - e.xyy).x,
                            Map(p + e.yxy).x - Map(p - e.yxy).x,
                            Map(p + e.yyx).x - Map(p - e.yyx).x
     ));
+    */
+    // inspired by tdhooper and klems - a way to prevent the compiler from inlining map() 4 times
+    vec3 n = vec3(0.0);
+    for( int i=0; i<4; i++ )
+    {
+        vec3 e = 0.5773*(2.0*vec3((((i+3)>>1)&1),((i>>1)&1),(i&1))-1.0);
+        n += e*Map(p+0.001*e).x;
+    }
+    return normalize(n);
 }
 
 vec3
@@ -82,7 +96,7 @@ Render(vec3 ro, vec3 rd)
         //Shadowing
 
         //Shading
-        lin += diff;
+        lin += P;
         col *= lin;
     }
     else //Sky
@@ -107,8 +121,8 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
     vec3 col = vec3(0.0);
 
     //We're standing a bit above the earth's surface looking about a meter ahead
-    vec3 ro = vec3(0.0, earthRadius , -1.0);
-    vec3 ta = vec3(0.0, earthRadius + 0.1, 0.0);
+    vec3 ro = vec3(0.0, 0.0 , -1.0);
+    vec3 ta = vec3(0.0, 0.0, 0.0);
 
     //Init camera vars
     float nearp = 1.0;
