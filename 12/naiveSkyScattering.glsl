@@ -2,8 +2,10 @@
 
 /*
     Reading this today:
+    https://www.scratchapixel.com/lessons/procedural-generation-virtual-worlds/simulating-sky/simulating-colors-of-the-sky
+
+    Read the article for the first time, will implement tomorrow.
 */
-//https://www.scratchapixel.com/lessons/procedural-generation-virtual-worlds/simulating-sky/simulating-colors-of-the-sky
 
 //Raymarcher vars
 #define MAX_STEPS 200
@@ -24,8 +26,7 @@ vec2
 Map(vec3 p)
 {
     vec2 res = vec2(1e10, -1.0);
-    //UOP(sdSphere(p - vec3(0.1, 0.1, 0.0), 0.25), SPHERE_ID);
-    UOP(sdSphere(p - vec3(0.0, -earthRadius - 0., 0.0), earthRadius), EARTH_ID);
+    UOP(sdSphere(p - vec3(0.1, 0.1, 0.0), 0.25), SPHERE_ID);
     return res;
 }
 
@@ -50,26 +51,6 @@ RayMarch(vec3 ro, vec3 rd)
 }
 
 vec3
-CalcNormal(vec3 p)
-{
-    /*
-    vec2 e = vec2(0.3, 0.0);
-    return normalize(vec3( Map(p + e.xyy).x - Map(p - e.xyy).x,
-                           Map(p + e.yxy).x - Map(p - e.yxy).x,
-                           Map(p + e.yyx).x - Map(p - e.yyx).x
-    ));
-    */
-    // inspired by tdhooper and klems - a way to prevent the compiler from inlining map() 4 times
-    vec3 n = vec3(0.0);
-    for( int i=0; i<4; i++ )
-    {
-        vec3 e = 0.5773*(2.0*vec3((((i+3)>>1)&1),((i>>1)&1),(i&1))-1.0);
-        n += e*Map(p+0.001*e).x;
-    }
-    return normalize(n);
-}
-
-vec3
 Render(vec3 ro, vec3 rd)
 {
     //Ray Results
@@ -84,14 +65,12 @@ Render(vec3 ro, vec3 rd)
     {
         //Geometry
         vec3 P = ro + t*rd;
-        vec3 N = CalcNormal(P);
 
         //Material
         col = vec3(1.0);
 
         //Lighting
         vec3 lin = vec3(0.0);
-        float diff = saturate(dot(sunDir, N));
 
         //Shadowing
 
