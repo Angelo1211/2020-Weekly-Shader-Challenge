@@ -13,10 +13,18 @@ const float R_atmo  = 6420e3;
 //uniforms
 float time = 0.0;
 
-vec2
-RayIntersectSphere(vec3 ro, vec3 rd, float r)
+bool
+RayIntersectSphere(vec3 ro, vec3 rd, vec3 sOrigin, float r, inout float t0, inout float t1)
 {
-
+    // geometric solution
+    vec3 L = sOrigin - ro; 
+    float tca = dot(L, rd);
+    if (tca < 0.0) return false;
+    float d2 = dot(L,L) - tca * tca; 
+    if (d2 > r) return false; 
+    float thc = sqrt(r - d2); 
+    t0 = tca - thc; 
+    t1 = tca + thc; 
 }
 
 vec3
@@ -26,7 +34,11 @@ Render(vec3 ro, vec3 rd)
     float t0, t1;
     vec3 col;
 
-    col += rd;
+    bool result = RayIntersectSphere(ro, rd, vec3(0.0), R_atmo , t0, t1);
+    if (!result)
+        return vec3(0.0);
+
+    col += ro +t0*rd;
 
     return col;
 }
