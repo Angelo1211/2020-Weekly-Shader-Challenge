@@ -48,78 +48,66 @@ Render(vec3 ro, vec3 rd)
 
     if (RayIntersectSphere(ro, rd, vec3(0.0), R_atmo , t0, t1)) {col = vec3(1.0, 0.0, 0.0);}
         
-    if (RayIntersectSphere(ro, rd, vec3(0.0), R_atmo , t0, t1)) {col = vec3(0.0, 1.0, 0.0);}
-        
-
     return col;
 }
 
 void 
 mainImage(out vec4 fragColor, in vec2 fragCoord)
 {
-    //AR corrected and going from -1 to 1 in the y
-    vec2 uv = 2.0 *(((fragCoord) - 0.5*iResolution.xy)/iResolution.y);
-
-    //Step 0: Calculate position
-    vec3 p = vec3(uv, 0.0);
-
     //Init common vars
+    const float domeRadius = 1.0;
     vec3 col = vec3(0.0);
+    time = iTime / 10.0;
+    
+    /*
+        1) Moving the origin to the center of the screen not the lower left corner
+        2) Aspect ratio correction to make y be of length 1 and go from [-0.5,0.5]
+        3) Changing that to [-1.0. 1.0] because x^2 = x at 1.0, comes in handy later
+    */
+    vec2 uv = 2.0 * (fragCoord - 0.5*iResolution.xy) / iResolution.y;
+
+    //We now have a cartesian plane with all points having a z = 0.0. 
+    //Not what we want long term
+    vec3 p = vec3(uv, 0.0);
 
     //Spherical Coordinates
     // dotproduct(a, b) = a.x * b.x + a.y * b.y;
-    // dotprocut(a, a) = a.x * a.x + a.y * a.y;
+    // dotproduct(a, a) = a.x * a.x + a.y * a.y;
     // length = sqrt(x^2 + y^2)
     // length^2 = dot(a, a)
-    float r2 = dot(uv,uv);
+    float length2 = dot(uv,uv);
 
-    // tan(phi) = opposite/adjacent
-    float phi = atan(uv.y, uv.x); 
+    //Setting our ray Origin one meter above earth surface
+    vec3 ro = vec3(0, R_earth + 1.0, 0.0 );
 
-
-    //Dotproduct(a, b) = |a| * |b| * cos(ang)
-    //Dotproduct(a, a) = |a| * |a| * cos(ang)
-    //r2 = |a| * |a| 
-    float theta = acos(1.0 - r2);
-
-    //Step 1: Show cartesian position
-    //col = p;
-
-    //Step 2: Limit to drawing only in position with radius < 1.0
-    //if(r2 < 1.0 && p.y > 0.0)
-    //if(r2 < 1.0 && r2 > 0.99 )
-    if(r2 < 1.0)
+    //Now is where that remapping to [-1,1] in y comes in handy
+    if(length2 <= domeRadius)
     {
-        //Step 3: Show phi
-        col = vec3(phi);
+        // tan(phi) = opposite/adjacent
+        float phi = atan(uv.y, uv.x); 
 
-        //Step 4: Show theta
+        /*
+            Radius^2 = height^2 + length^2
+            Cos(theta) = adj / hyp
+            cos(theta) = height/radius
+            radius = 1.0
+            theta = acos(height)
+                  = acos(sqrt(1.0 - length^2))
+            Scratchapixel uses acos(1.0 - length^2) but I don't think that's corrrect 
+            since  Radius^2 = height^2 + length^2 and we need to solve for height we should use
+                  = acos(sqrt(1.0 - length^2))
+            We assume the dome radius is 1.0 for simplicity
+        */
+        float theta = acos(sqrt(domeRadius - length2));
+
+        //Getting a ray direction 
+        //Y is up?
+        vec3 rd = vec3( sin(theta) * cos(phi), cos(theta), sin(theta) * sin(phi) );
+
+
         col = vec3(theta);
-
-        col = vec3(1.0);
     }
 
     GAMMA(col);
     fragColor = vec4(col, 1.0);
 }
-
-/*
-
-    //One meter above earth surface
-    vec3 ro = vec3(0, R_earth + 1.0, 0.0 );
-    //Theta is zero at the edges of the dome so 1.0 - z2 gives us the radius
-    //float theta = (z2);
-    time = iTime / 10.0;
-    //Spherical to cartesian coordinates
-    //Y is up?
-    /*
-    vec3 rd = vec3(sin(theta) * cos(phi),
-                   cos(theta),
-                   sin(theta) * sin(phi)
-                   );
-        //col = Render(ro, rd);
-        //col += vec3(rd);
-        //col = vec3(uv, 0.0);
-        //col = vec3(z2);
-        //col = vec3(theta);
-*/
