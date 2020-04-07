@@ -77,8 +77,6 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
     // length^2 = dot(a, a)
     float length2 = dot(uv,uv);
 
-    //Setting our ray Origin one meter above earth surface
-    vec3 ro = vec3(0, R_earth + 1.0, 0.0 );
 
     //Now is where that remapping to [-1,1] in y comes in handy
     if(length2 <= domeRadius)
@@ -100,12 +98,60 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
         */
         float theta = acos(sqrt(domeRadius - length2));
 
-        //Getting a ray direction 
-        //Y is up?
-        vec3 rd = vec3( sin(theta) * cos(phi), cos(theta), sin(theta) * sin(phi) );
+        /*
+            Getting a direction vector from the spherical coords
+            We want to retain the OpenGL coordinates like so:
+                x: right-left
+                y: up-down
+                z: in-out
+
+            Solving y:
+                Theta denotes the rise of the vector over the x-z plane, with that we can take the cos of it
+                to get the height so 
+                y = r*cos(theta) (r = 1.0)
+                y = cos(theta)
+            
+            Solving x:
+                We now need the length of the direction vector on the xz plane, that will be r*sin(theta)
+                The problem is that now we need the component of this length that contributes to x. We can
+                obtain that by the following observation
+                x: (1, 0, 0)
+                sin(theta) = 1 when theta = pi/2
+                cos(phi) = 1 when phi = 0
+                sin(phi) = 1 when phi = pi/2
+        */
+
+        vec3 rd_old = vec3(sin(theta) * cos(phi),
+                       cos(theta),
+                       sin(theta) * sin(phi) );
 
 
-        col = vec3(theta);
+        float ang = M_PI;
+        mat3 rotation_around_x = mat3(vec3(1,        0,         0),
+                                      vec3(0, cos(ang), -sin(ang)),
+                                      vec3(0, sin(ang),  cos(ang)));
+
+        vec3 rd_new = vec3(sin(theta) * cos(phi),
+                           sin(theta) * sin(phi),
+                           cos(theta));
+
+        rd_new = rd_new * rotation_around_x;
+
+#if 1
+        col = rd_new;
+#else
+        col = rd_old;
+#endif
+    
+
+        //col = vec3(sin(theta), 0.0, 0.0 );
+        /*
+        Shouldn't this be the same?!?!
+        col = vec3(sin(theta), 0.0, 0.0);
+        col = vec3(sin(theta), cos(theta), 0.0) * vec3(1, 0, 0);
+        */
+        //Setting our ray Origin one meter above earth surface
+        //vec3 ro = vec3(0, R_earth + 1.0, 0.0 );
     }
 
     GAMMA(col);
