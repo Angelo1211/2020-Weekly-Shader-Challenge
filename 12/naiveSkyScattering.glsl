@@ -77,6 +77,7 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
     // length^2 = dot(a, a)
     float length2 = dot(uv,uv);
 
+    vec3 ro = vec3(0, 0.0, R_earth + 1.0 );
 
     //Now is where that remapping to [-1,1] in y comes in handy
     if(length2 <= domeRadius)
@@ -99,61 +100,85 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
         float theta = acos(sqrt(domeRadius - length2));
 
         /*
-            Getting a direction vector from the spherical coords
-            We want to retain the OpenGL coordinates like so:
-                x: right-left
-                y: up-down
-                z: in-out
+            We can construct the cartesian vector from the spherical coords by using:
+            the following: 
+            vec3 original = vec3(sin(theta) * cos(phi),
+                                 sin(theta) * sin(phi),
+                                 cos(theta));
+            The derivation from this is as follows, change of height in hemisphere
+            occurrs in the z direction, is constant in y or x. So we know that the 
 
-            Solving y:
-                Theta denotes the rise of the vector over the x-z plane, with that we can take the cos of it
-                to get the height so 
-                y = r*cos(theta) (r = 1.0)
-                y = cos(theta)
-            
-            Solving x:
-                We now need the length of the direction vector on the xz plane, that will be r*sin(theta)
-                The problem is that now we need the component of this length that contributes to x. We can
-                obtain that by the following observation
-                x: (1, 0, 0)
-                sin(theta) = 1 when theta = pi/2
-                cos(phi) = 1 when phi = 0
-                sin(phi) = 1 when phi = pi/2
+            *height = r cos z*;
+            *then the xy plane shares r sin z*
+            *r = 1.0*
+            *in the plane theta = 90 so sin(theta) 1*
+            *you know phi = 0 when x = 0 so it must be cos for x*
+            *same logic for using sin for y*
+
+            This leaves us with:
+                x: right-left (hemi base)
+                y: up-down    (hemi base)
+                z: in-out     (hemi cap)
+            Which is a right-handed coordinate system
+
+            To check for handedness this is the only consistent way I have found:
+                1) Realize that handedness is determined by the result of cross products
+                2) In a right handed system ixj = k
+                3) Use the way your fingers naturally curl inwards to curl them from i->j
+                4) The thumb now points in the direction of k (or z in our case)
+
+            What we want:
+                x: right-left (hemi base)
+                y: up-down    (hemi cap)
+                z: in-out     (hemi base)
+            We want to maintain the right handedness of the system
+            but want to rotate z with y
+
+            The origina code did the following:
+                vec3 desired = vec3(sin(theta) * cos(phi),
+                                    cos(theta),
+                                    sin(theta) * sin(phi));
+
+            This is wrong! Or atleast not what I wanted, it makes
+            the coordinate system become left-handed by switching
+            z with y, literally! We want to rotate but not just switch them since this will
+            mess up the handedness
+
+            What we need to do is Rotate the hemisphere -90deg in x
+            Draw it out so you see why it's negative
+
+            *Insert explanation of how to derive rotation vector*
+              i j k 
+            [ 1 0 0 ]
+            [ 0 0 0 ]
+            [ 0 0 0 ]
+            *Explain that we know this is only for 90 so can precalculate*
+
+            *Explain that a negative needs to be inserted for correctness*
+
+            *got it*
         */
 
-        vec3 rd_old = vec3(sin(theta) * cos(phi),
-                       cos(theta),
-                       sin(theta) * sin(phi) );
 
+        float ang = -M_PI / 2.0;
+        mat3 xRot = mat3(vec3(1,        0,         0),
+                         vec3(0, cos(ang), -sin(ang)),
+                         vec3(0, sin(ang), cos(ang)));
+        //rd_new = rd_new * (xRot);
+        //rd_new.y = -rd_new.y; switch y if you are right handed
+        //rd_new.z = -rd_new.z;
 
-        float ang = M_PI;
-        mat3 rotation_around_x = mat3(vec3(1,        0,         0),
-                                      vec3(0, cos(ang), -sin(ang)),
-                                      vec3(0, sin(ang),  cos(ang)));
+        //col = original;
+        col = desired;
 
-        vec3 rd_new = vec3(sin(theta) * cos(phi),
-                           sin(theta) * sin(phi),
-                           cos(theta));
-
-        rd_new = rd_new * rotation_around_x;
-
-#if 1
-        col = rd_new;
-#else
-        col = rd_old;
-#endif
-    
-
-        //col = vec3(sin(theta), 0.0, 0.0 );
-        /*
-        Shouldn't this be the same?!?!
-        col = vec3(sin(theta), 0.0, 0.0);
-        col = vec3(sin(theta), cos(theta), 0.0) * vec3(1, 0, 0);
-        */
-        //Setting our ray Origin one meter above earth surface
-        //vec3 ro = vec3(0, R_earth + 1.0, 0.0 );
     }
 
     GAMMA(col);
     fragColor = vec4(col, 1.0);
 }
+
+        /*
+            Shouldn't this be the same?!?!
+            col = vec3(sin(theta), 0.0, 0.0);
+            col = vec3(sin(theta), cos(theta), 0.0) * vec3(1, 0, 0);
+        */
