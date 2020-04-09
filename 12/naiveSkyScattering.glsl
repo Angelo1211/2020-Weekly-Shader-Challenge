@@ -77,7 +77,8 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
     // length^2 = dot(a, a)
     float length2 = dot(uv,uv);
 
-    vec3 ro = vec3(0, 0.0, R_earth + 1.0 );
+    //vec3 ro = vec3(0, 0.0, R_earth + 1.0 );
+    vec3 ro = vec3(0,  R_earth + 1.0 , 0.0 );
 
     //Now is where that remapping to [-1,1] in y comes in handy
     if(length2 <= domeRadius)
@@ -97,7 +98,7 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
                   = acos(sqrt(1.0 - length^2))
             We assume the dome radius is 1.0 for simplicity
         */
-        float theta = acos(sqrt(domeRadius - length2));
+        float theta = acos((domeRadius - length2));
 
         /*
             We can construct the cartesian vector from the spherical coords by using:
@@ -159,17 +160,48 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
             *got it*
         */
 
+        vec3 original = vec3(sin(theta) * cos(phi),
+                             sin(theta) * sin(phi),
+                             cos(theta));
+
+        vec3 rd_new = original;
+        //rd_new.z *= -1.0;
+
+        vec3 desired = vec3(sin(theta) * cos(phi),
+                            cos(theta),
+                            sin(theta) * sin(phi));
 
         float ang = -M_PI / 2.0;
-        mat3 xRot = mat3(vec3(1,        0,         0),
-                         vec3(0, cos(ang), -sin(ang)),
-                         vec3(0, sin(ang), cos(ang)));
-        //rd_new = rd_new * (xRot);
+        //float ang = M_PI;
+
+        mat3 xRot = mat3(1,        0,         0,
+                         0, cos(ang), -sin(ang),
+                         0, sin(ang), cos(ang));
+        rd_new = (xRot) * rd_new ;
+        //rd_new = transpose(xRot) * rd_new ;
+        //rd_new = xRot * rd_new ;
+        //rd_new.y *= -1.0;
+
+        // mat3 xRot90 = mat3(vec3(1, 0, 0),
+        //                    vec3(0, 0, 1),
+        //                    vec3(0, -1,0));
+
+        //rd_new = rd_new * xRot  ;
         //rd_new.y = -rd_new.y; switch y if you are right handed
         //rd_new.z = -rd_new.z;
 
+        //col = abs(rd_new);
+        col = (rd_new);
+        if(uv.x > 0.2)
+            col = desired;
+
+        //col = rd_new;
+        //col = desired;
         //col = original;
-        col = desired;
+        //col = p;
+        //col = vec3(phi);
+        //col = vec3(uv, 0.0);
+        //col = vec3(length2);
 
     }
 
