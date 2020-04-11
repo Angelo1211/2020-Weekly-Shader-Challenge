@@ -65,13 +65,31 @@ hash(float seed)
 mat3
 SetCamera(vec3 ro, vec3 ta, float roll)
 {
+    /*
+        Iñigos way:
+        vec3 cw = normalize(ta-ro);
+        vec3 cp = vec3(sin(cr), cos(cr),0.0);
+        vec3 cu = normalize( cross(cw,cp) );
+        vec3 cv =          ( cross(cu,cw) );
+        return mat3( cu, cv, cw );
+    */
+#if 1
     vec3 f, temp, r, u;
     f = normalize(ta - ro);
     temp = normalize(vec3(sin(roll), cos(roll), 0.0));
     r = normalize(cross(temp, f));
-    u = normalize(cross(f, r));
+    u = (cross(f, r)); //
 
     return mat3(r, u, f);
+#else
+    vec3 k = normalize(ta-ro);
+	vec3 j_temp = vec3(sin(roll), cos(roll),0.0);
+	vec3 i = normalize( cross(k,j_temp) ); //This results in -i
+	vec3 j =          ( cross(i,k) ); //This results in +j!
+    
+    return mat3( i, j, k ); // -i, +j, +k
+#endif
+
 }
 
 //------------------------------------------------------------------------------------

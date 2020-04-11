@@ -78,7 +78,7 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
         2) Aspect ratio correction to make y be of length 1 and go from [-0.5,0.5]
         3) Changing that to [-1.0. 1.0] because x^2 = x at 1.0, comes in handy later.
     */
-    vec2 uv = 2.0 * (fragCoord - 0.5*iResolution.xy) / iResolution.y;
+    vec2 uv = 2.0 *  (fragCoord - 0.5*iResolution.xy) / iResolution.y;
 
     /*
         Our goal here is to perform ray tracing along a hemisphere to capture the full 180deg of sky.
@@ -86,7 +86,7 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
         known as a fish-eye lens camera.
         We'll begin by building a cartesian plane with all points having a z = 0.0. 
     */
-    vec3 p = vec3(uv, 0.0);
+    vec3 p = vec3(uv.x, 0.0, 0.0);
 
     /*
         Our goal is to construct a hemisphere with it's base aligned with the xy plane and the height 
@@ -157,7 +157,7 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
             Scratchapixel uses acos(1.0 - length^2) but I don't think that's correct, as seen above.
                 -Adding this fixes the weird permanent sunset at the edges of their model
         */
-        float theta = acos((hemisphereRadius - length2));
+        float theta = acos(sqrt((hemisphereRadius - length2)));
 
         /*
             We have now constructed a vector in spherical coordinates for each pixel over the surface
@@ -300,7 +300,8 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
         //rd_new.z = -rd_new.z;
 
         //col = abs(rd_new);
-        col = (rd_new);
+        //col = (rd_new);
+        col = vec3(p);
         //if(uv.x > 0.2)
             //col = desired;
 
@@ -315,7 +316,7 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
         //vec3 ro = vec3(0, 0.0, R_earth + 1.0 );
     }
 
-    GAMMA(col);
+    //GAMMA(col);
     fragColor = vec4(col, 1.0);
 }
 
