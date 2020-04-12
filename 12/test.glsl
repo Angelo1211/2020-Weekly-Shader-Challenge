@@ -5,7 +5,6 @@ hash(vec2 n){
     return fract(sin(dot(n,vec2(12.9898, 4.1414)))*43758.5453);
 }
 
-
 #define SATURN_ID 0.0
 #define GROUND_ID 1.0 
 vec2
@@ -119,7 +118,7 @@ Render(vec3 ro, vec3 rd, vec2 uv)
 void
 mainImage(out vec4 fragColor, in vec2 fragPos)
 {
-    float nearP = 1.8;
+    float nearP = 1.8; 
     float roll = 0.0;
     vec3 tot = vec3(0.0);
 
@@ -133,12 +132,16 @@ mainImage(out vec4 fragColor, in vec2 fragPos)
         vec2 uv = ((fragPos) - 0.5*iResolution.xy)/iResolution.y;
 #endif
         //Camera
-        vec3 ta = vec3(1.0, 0.70, 0.0);
-        vec3 ro =ta + vec3(0.0, 0.0, -5.5);
+        vec3 ta  = vec3(0.0, 0.00, 0.0);
+        vec3 ro  = ta + vec3(1.0, 0.0, -5.5);
         mat3 cam = SetCamera(ro, ta, roll);
-        vec3 rd = cam * normalize(vec3(uv, nearP));
+        vec3 rd  = cam * normalize(vec3(uv, nearP));
         vec3 col = Render(ro, rd, uv);
         col = rd;
+        //https://www.3dgep.com/understanding-the-view-matrix/#Look_At_Camera
+        //col *= vec3(1, 0, 0); //Red only
+        //col *= vec3(0, 1, 0); //Green only
+        //col *= vec3(0, 0, 1); //Blue only
 
         GAMMA(col);
         tot += col;
