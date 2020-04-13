@@ -10,6 +10,7 @@ const float R_atmo  = 6420e3;
 
 //uniforms
 float time = 0.0;
+vec3 sunDir = vec3(0.0);
 
 //https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-sphere-intersection
 bool
@@ -21,8 +22,12 @@ RayIntersectSphere(vec3 ro, vec3 rd, vec3 sOrigin, float r, inout float t0, inou
     //Distance to closest point to center along ray
     float tca = dot(rc, rd);
 
-    //If negative it means the intersection ocurred behind the ray, don't care about that 
+    /*
+    //If negative it means the intersection ocurred behind the ray, 
+    //If you're inside the sphere one one of the points might be negative
+    //so we don't want to early out just yet.
     if (tca < 0.0) return false;
+    */
 
     //Shortest distance from the center to the ray
     float d2 = dot(rc, rc) - tca * tca; 
@@ -39,16 +44,124 @@ RayIntersectSphere(vec3 ro, vec3 rd, vec3 sOrigin, float r, inout float t0, inou
     return true;
 }
 
+float
+rayleighPhaseFunction(float mu)
+{
+    return 
+          3.0 * (1.0 + mu*mu)
+    / //----------------------
+                 4.0;
+}
+
+float henyeyGreensteinPhaseFunc(float mu)
+{
+    const float g = 0.76;
+	return
+						(1. - g*g)
+	/ //---------------------------------------------
+		((4. * M_PI) * pow(1. + g*g - 2.*g*mu, 1.5));
+}
+
+
+// Atmosphere thickness if the density was exponential and uniform
+/*
+    Tune these numbers
+*/
+const float hR = 7994.0; // Rayleigh
+const float hM = 1200.0; // Mie
+const vec3 betaR = vec3(5.5e-6, 13.0e-6, 22.4e-6); // Rayleigh 
+const vec3 betaM = vec3(21e-6); // Mie
+
+bool
+getSunLight(in vec3 ro, in vec3 rd, inout float lightRayleigh, inout float lightMie)
+{
+
+    float t0, t1;
+    RayIntersectSphere(ro, rd, vec3(0.0), R_atmo , t0, t1);
+
+
+	float t = 0.;
+    float numSamples = 8.0;
+	float stepSize = t1 / numSamples;
+
+	for (int i = 0; i < int(numSamples); i++) {
+		vec3 pos = ro + rd * (t + 0.5 * stepSize);
+		float height = length(pos) - R_earth;
+
+		if (height < 0.)
+			return false;
+
+		lightRayleigh += exp(-height / heiR) * stepSize;
+		lightMie += exp(-height / hM) * stepSize;
+
+		march_pos += march_step;
+	}
+}
 vec3
 Render(vec3 ro, vec3 rd)
 {
     //Ray setup
-    float t0, t1;
+    float t0, t1; //First and second intersection point, if you're inside the sphere 
     vec3 col;
 
-    if (RayIntersectSphere(ro, rd, vec3(0.0), R_atmo , t0, t1)) {col = vec3(1.0, 0.0, 0.0);}
-        
-    return col;
+    //Ray-Atmosphere intersection
+    RayIntersectSphere(ro, rd, vec3(0.0), R_atmo , t0, t1);
+
+    //Determining step size 
+    const float numSamples = 16.0;
+    float stepSize = t1 / float(numSamples);
+
+    //Cosine of angle between view and sun direction
+    float mu = dot(rd, sunDir);
+
+    // Kind of like a BRDF? 
+    //TODO describe
+    float phaseRayleigh = rayleighPhaseFunction(mu);
+    float phaseMie = henyeyGreensteinPhaseFunc(mu);
+
+    vec3 totalRayleigh = vec3(0.0);
+    vec3 totalMie = vec3(0.0);
+
+    /*
+        Optical depth or average density?! 
+        TODO: Study this 
+    */
+    vec3 densityRayleigh = vec3(0.0);
+    vec3 densityMie = vec3(0.0);
+
+    float currentT = 0.0;
+    for(int i =0; i < int(numSamples); ++i)
+    {
+        //TODO(AO): why 0.5? Evaluate at the middle of the step maybe?
+        vec3 pos = ro + (currentT * stepSize * 0.5) * rd;
+
+        float height = length(pos) - R_earth;
+
+        float heightRayleigh = exp(-height / hR) * stepSize;
+        float heightMie = exp(-height / hM) * stepSize;
+
+        densityRayleigh += heightRayleigh;
+        densityMie += heightMie;
+
+        float lightRayleigh = 0.0;
+        float lightMie = 0.0;
+
+        if(getSunLight(pos, sunDir, lightRayleigh, lightMie))
+        {
+            //Possible the transmittance?
+            vec3 tau = betaR * (lightRayleigh + densityRayleigh) +
+                       betaM * 1.1 * (densityMie + lightMie);
+            vec3 attenuation = exp(-tau);
+
+            totalRayleigh += heightRayleigh * attenuation;
+            totalMie += heightMie * attenuation;
+        }
+
+        currentT += stepSize;
+    }
+
+    const float sun = 20.0;
+    return sun * (totalRayleigh * phaseRayleigh * betaR + totalMie * phaseMie * betaM );
 }
 
 void 
@@ -56,9 +169,10 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
 {
     //Init common vars
     vec3 col = vec3(0.0);
-    time = iTime / 10.0;
+    time = iTime / 5.0;
 
     /*
+        INTRO
         Let's begin by defining some properties of our world.
         1) Our worldspace coordinates will think of Y as up.
         2) The earth's center shall be located at the origin of our coordinate system
@@ -67,13 +181,15 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
 
         Hence our ray origin will be located at the following worldspace coordinates:
     */
-    vec3 ro = vec3(0,  R_earth + 1.0 , 0.0 );
+    vec3 rayOrigin = vec3(0,  R_earth + 1.0 , 0.0 );
     
     /*
         We've taken care of the first 3 properties with the above line but it's gonna take a lot 
         more work to get to the 4th one. Let's move away from worldspace coordinates for now and 
-        build the camera in screen space first, then position it and point in world space once done. 
-        We're going to build the basic coordinate sytem for our shader here.
+        build the camera in screen space first, then construct all of the rays in camera space.
+        Then lastly position it and point in world space once done. 
+        
+        Moving from screen-space to NDC space
         1) Moving the origin to the center of the screen from the lower left corner
         2) Aspect ratio correction to make y be of length 1 and go from [-0.5,0.5]
         3) Changing that to [-1.0. 1.0] because x^2 = x at 1.0, comes in handy later.
@@ -81,247 +197,289 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
     vec2 uv = 2.0 *  (fragCoord - 0.5*iResolution.xy) / iResolution.y;
 
     /*
-        Our goal here is to perform ray tracing along a hemisphere to capture the full 180deg of sky.
-        To do this we're going to construct a hemisphere and sample the surface with every pixel. This is
-        known as a fish-eye lens camera.
-        We'll begin by building a cartesian plane with all points having a z = 0.0. 
+        Our goal here is to perform ray tracing view the film surface shaped like a 
+        a hemisphere to capture the full 180deg of sky. To do this we obviously first need
+        to construct a hemisphere and sample that surface with a different ray for every pixel.
+        This is otherwise known as a fish-eye lens camera.
+
+        We choose (rather arbitrarily) that the base is aligned with the xy plane and the
+        height changes in z. The base will be a radius 1 circle. Building this circle is
+        straightforward, we evaluate the distance of each pixel to the center of the screen 
+        (which is 0,0 in the coordinate sytem we built above).
+
+        We'll keep the length squared since it'll save us a sqrt further ahead.
+
+        dotproduct(a, b) = a.x * b.x + a.y * b.y + a.z * b.z;
+        dotproduct(a, a) = a.x * a.x + a.y * a.y + a.z * a.z;
+        length = sqrt(x^2 + y^2 +z^2)
+    [1] length^2 = dot(a, a)
     */
-    vec3 p = vec3(uv.x, 0.0, 0.0);
+    float length2 = dot(uv, uv);
 
     /*
-        Our goal is to construct a hemisphere with it's base aligned with the xy plane and the height 
-        in z. This will make the construction easy but the rendering somewhat harder. The base will be a radius
-        1 circle. Building this circle is straightforward, we evaluate the distance of each pixel to the center
-        of the screen (which is 0,0 in the coordinate sytem we built above).
-
-        We'll keep the length squared since it'll save us an unecessary sqrt
-        Spherical Coordinates
-            dotproduct(a, b) = a.x * b.x + a.y * b.y + a.z * b.z;
-            dotproduct(a, a) = a.x * a.x + a.y * a.y + a.z * a.z;
-            length = sqrt(x^2 + y^2 +z^2)
-            length^2 = dot(a, a)
-    */
-    float length2 = dot(p, p);
-
-    /*
-        To build a circle we skip work for all pixels that are not in a unit circle.
-        Here's where that remapping to [-1,1] in y comes in handy.
-        This gives us the "base" of the hemisphere camera lens.
+        We build the base circle by simply saying we don't want to render any pixels
+        which have a length larger than 1.0 (our radius) Here's where that remapping 
+        from [0.5, 0.5] to [-1,1] in y comes in handy.
     */
     const float hemisphereRadius = 1.0;
-    if(length2 <= hemisphereRadius)
+    if(length2 > hemisphereRadius)
     {
-        /*
-            Building a hemisphere is easier in spherical coordinates so we're going to transform our cartesian
-            coords to spherical step by step. Spherical coordinates are defined with three component too:
-                A radius R (1.0 in our case)
-                Zenith angle Theta [0, PI]
-                Azimuth angle Phi [0, 2PI]
-                Represented as (R, theta, phi)
-            We've defined R ourselves to be one. next we shall obtain phi. Now, depending where you search for 
-            info on this, they might call this angle theta. I'm going with the wikipedia convention for physics
-            as seen here: https://en.wikipedia.org/wiki/Spherical_coordinate_system
-            We get phi like so: 
-                tan(ang) = opposite / adjacent
-                tan(phi) = y / x
-            [1] phi = atan(y, x) (using atan2 syntax since it avoids negative ambiguities)
-        */
-        float phi = atan(uv.y, uv.x); 
-
-        /*
-            Lastly we need the zenith angle theta to complete our hemisphere in spherical coords.
-            To do this we need the radius R we established earlier for circle in the base and we'll
-            re-use the same radius for the spherical cap. 
-
-            Height
-            ^         R
-            |       / 
-            |     / 
-            |   / 
-            | /
-            0-----------> Length
-
-            This is my best attempt at an ASCII diagram of how to obtain the angle theta, which is the angle
-            that covers the space between Z and R. Remember, we have already obtained the length^2 from the 
-            base of the circle.
-            We'll obtain theta like so:
-                Radius^2   = height^2 + length^2
-            [1] height     = sqrt(R^2 - L^2)
-                Cos(ang)   = adj / hyp
-                cos(theta) = height/radius
-                theta = acos(height/radius)
-                    (in our case R = 1.0)
-                theta = acos(height)
-            [2] theta = acos(sqrt(1.0 - length^2))
-
-            Scratchapixel uses acos(1.0 - length^2) but I don't think that's correct, as seen above.
-                -Adding this fixes the weird permanent sunset at the edges of their model
-        */
-        float theta = acos(sqrt((hemisphereRadius - length2)));
-
-        /*
-            We have now constructed a vector in spherical coordinates for each pixel over the surface
-            of the hemisphere cap. For rendering we will want this vector represented using cartesian
-            coordinates. Remember that we had defined our original cartesian system where we built the
-            circle with +X to the right of the screen (parallel to the screen width) and +Y going upwards
-            (parallel to the screen height). So, since the base was aligned with the XY plane
-            the height of the hemisphere must be aligned with Z. With this information we have enough
-            to calculate the Z coordinate of our hemisphere surface vector:
-            
-            Height = Z component
-            Height = R * cos(theta)
-            Z = R * cos(theta)
-            (Radius = 1.0)
-        [1] Z = cos(theta)
-
-            X and Y can be obtained by realizing that the remaining length of the vector: R sin(theta)
-            will result in the projection of the hemisphere vector on the XY plane. From then on we can
-            reason about how to obtain transformations for X and Y by thinking about how phi behaves when
-            we're on X or on Y.  This will allows us to break down that projection even further into
-            its contribution on each axis.
-
-            For X:
-            Cartesian: (1, 0, 0) (X, Y ,Z)
-            Spherical: (1, 90deg, 0deg) (R, theta, phi)
-            X = sin(theta) * ?(phi)
-            (Substituting for X, theta, phi)
-                1 = sin(90deg) * ?(0)
-                1 = 1 * ?(0)
-                ? = cos
-                (Since cos(0) = 1)
-        [2] X = sin(theta) * cos(phi)
-
-            Repeating the process for Y:
-            Cartesian: (0, 1, 0) (X, Y ,Z)
-            Spherical: (1, 90deg, 90deg) (R, theta, phi)
-            Y = sin(theta) * ?(phi)
-            (Substituting for Y, theta, phi)
-                1 = sin(90deg) * ?(90deg)
-                1 = 1 * ?(90deg)
-                ? = sin
-                (Since sin(90deg) = 1)
-        [3] Y = sin(theta) * sin(phi)
-        
-        Putting it all together:
-        */
-        vec3 hemisphereSurface = vec3(sin(theta) * cos(phi),
-                                      sin(theta) * sin(phi),
-                                      cos(theta));
-
-        /*
-            This leaves us with:
-                +x: hemi base
-                +y: hemi base
-                +z: hemi cap
-            
-            At this point I started wondering if we were in a left handed or a right handed 
-            coordinate system. As far as I can tell, it is ambiguous at this moment. Throughout
-            our hemisphere construction we have not performed any operation that would determine
-            handedness. So all of the math we did up to now would result in the same vectors
-            components in both left or right handed coordinate systems.
-            
-            All we know for sure is that the hemisphere base is in the XY plane, +X points to the
-            right parallel to the screen width, +Y points up parallel to the height and +Z is 
-            where the hemisphere cap resides, yet not if it points into or out of the screen - 
-            only that it is perpendicular to the XY plane.
-
-            In the process of reasoning about this I have found a consistent way to determine if
-            your coordinate system is left handed or right handed:
-                1) Realize that handedness determines the result of cross products
-                2) I want my cross products to behave as expected 
-                3) In a right handed system ixj = +k, jxk = +i, kxi= +j 
-                         i
-                        / \
-                       /   \
-                      k-----j
-                4) Use the way your fingers naturally curl inwards to curl them from i->j
-                5) The thumb now points in the direction of k (z in our case)
-            
-            Now, we can resolve this ambiguity with more information. Let's start by specifying 
-            the world-space coordinates
-            by specifying our world-space coordinates, the 
-            direction we want our camera to point in and in which space we had  
-
-            What we want:
-                x: right-left (hemi base)
-                y: up-down    (hemi cap)
-                z: in-out     (hemi base)
-            We want to maintain the right handedness of the system
-            but want to rotate z with y
-
-            The origina code did the following:
-                vec3 desired = vec3(sin(theta) * cos(phi),
-                                    cos(theta),
-                                    sin(theta) * sin(phi));
-
-            This is wrong! Or atleast not what I wanted, it makes
-            the coordinate system become left-handed by switching
-            z with y, literally! We want to rotate but not just switch them since this will
-            mess up the handedness
-
-            What we need to do is Rotate the hemisphere -90deg in x
-            Draw it out so you see why it's negative
-
-            *Insert explanation of how to derive rotation vector*
-              i j k 
-            [ 1 0 0 ]
-            [ 0 0 0 ]
-            [ 0 0 0 ]
-            *Explain that we know this is only for 90 so can precalculate*
-
-            *Explain that a negative needs to be inserted for correctness*
-
-            *got it*
-        */
-
-        vec3 rd_new = hemisphereSurface;
-        //rd_new.z *= -1.0;
-
-        vec3 desired = vec3(sin(theta) * cos(phi),
-                            cos(theta),
-                            sin(theta) * sin(phi));
-
-        float ang = -M_PI / 2.0;
-        //float ang = M_PI;
-        mat3 xRot = mat3(1,        0,         0,
-                         0, cos(ang), -sin(ang),
-                         0, sin(ang), cos(ang));
-        //rd_new = (xRot) * rd_new ;
-        //rd_new = transpose(xRot) * rd_new ;
-        //rd_new = xRot * rd_new ;
-        //rd_new.y *= -1.0;
-
-        // mat3 xRot90 = mat3(vec3(1, 0, 0),
-        //                    vec3(0, 0, 1),
-        //                    vec3(0, -1,0));
-
-        //rd_new = rd_new * xRot  ;
-        //rd_new.y = -rd_new.y; switch y if you are right handed
-        //rd_new.z = -rd_new.z;
-
-        //col = abs(rd_new);
-        //col = (rd_new);
-        col = vec3(p);
-        //if(uv.x > 0.2)
-            //col = desired;
-
-        //col = rd_new;
-        //col = desired;
-        //col = original;
-        //col = p;
-        //col = vec3(phi);
-        //col = vec3(uv, 0.0);
-        //col = vec3(length2);
-
-        //vec3 ro = vec3(0, 0.0, R_earth + 1.0 );
+        fragColor = vec4(0.0);
+        return;
     }
 
-    //GAMMA(col);
+    /*
+        Building a hemisphere is easier in spherical coordinates. So, we're going to transform
+        our cartesian coords P to spherical step by step.
+
+        Spherical coordinates are defined with three components too:
+            R: A radius           [0, 1.0]  (could be any value, picked 1.0 for simplicity)
+            Theta: Zenith angle   [0,  PI]
+            Phi: Azimuth angle    [0, 2PI]
+            Represented as a 3 component vector: (R, theta, phi)
+
+        Now, depending where you search for info on this, phi might actually be called theta
+        and viceversa. For clarification I'm going to stay with the wikipedia convention for 
+        physics as seen here: https://en.wikipedia.org/wiki/Spherical_coordinate_system
+
+        We get phi like so: 
+            tan(ang) = opposite / adjacent
+            tan(phi) = y / x
+        [1] phi = atan(y, x) (using atan2 syntax since it avoids negative ambiguities)
+    */
+    float phi = atan(uv.y, uv.x); 
+
+    /*
+        Lastly we need the zenith angle theta to complete our hemisphere in spherical coords.
+        We'll need the radius R we established earlier for the the base and re-use it as the 
+        radius for the spherical cap. 
+
+        Height
+        ^         R
+        |       / 
+        |     / 
+        |   / 
+        | /
+        0-----------> Length
+
+        This ASCII diagram shows the hemisphere side-on with the base on the x-axis of the plost
+        and the height on the y. You can see that to obtain the angle theta (which here is the angle
+        that covers the space between the Height and R) we must use R and the Length. Remember, we
+        have already obtained the length^2 from the  base of the circle.
+
+        So theta is obtained like so:
+            radius^2   = height^2 + length^2
+        [1] height     = sqrt(R^2 - L^2)
+            cos(ang)   = adj / hyp
+            cos(theta) = height/radius
+            theta = acos(height/radius)
+                (in our case R = 1.0)
+            theta = acos(height)
+        [2] theta = acos(sqrt(1.0 - length^2))
+
+        Scratchapixel uses acos(1.0 - length^2) but I don't think that's correct, as seen above.
+            -Adding this fixes the weird permanent sunset at the edges of their model
+    */
+    float theta = acos(sqrt((hemisphereRadius - length2)));
+
+    /*
+        Now that we have (R, theta, phi) we have finally constructed the vectors we need to sample
+        the sky using a hemisphere. However, during rendering we will want these same vectors to be
+        represented using cartesian coordinates. 
+        
+        If you remember we had originally defined a cartesian system where we built the
+        circle with +X to the right of the screen (parallel to the screen width) and +Y going
+        upwards (parallel to the screen height). So, since the base was aligned with the XY
+        plane the height of the hemisphere must be aligned somehow with the +Z coordinate.
+        We'll be transforming our height in spherical to z in cartesian like so:
+        
+        Height = Z component
+        Height = R * cos(theta)
+        Z = R * cos(theta)
+        (Radius = 1.0)
+    [1] Z = cos(theta)
+
+        X and Y can be obtained by realizing that the remaining length of the vector is R*sin(theta).
+        This remaining length is the projection of the vector on the XY plane. From then on we can
+        reason about how to obtain transformations for X and Y by thinking about how phi behaves when
+        it's full length lies either only  on X or only on Y.  This will allows us to break down
+        that projection even further into its individual contribution on each axis.
+
+        For X:
+        Cartesian: (1, 0, 0) (X, Y ,Z)
+        Spherical: (1, 90deg, 0deg) (R, theta, phi)
+        X = sin(theta) * ?(phi) (? = some function)
+        (Substituting for X, theta, phi)
+            1 = sin(90deg) * ?(0)
+            1 = 1 * ?(0)
+            ? = cos
+            (Since cos(0) = 1)
+    [2] X = sin(theta) * cos(phi)
+
+        For Y:
+        Cartesian: (0, 1, 0) (X, Y ,Z)
+        Spherical: (1, 90deg, 90deg) (R, theta, phi)
+        Y = sin(theta) * ?(phi) (? = some function)
+        (Substituting for Y, theta, phi)
+            1 = sin(90deg) * ?(90deg)
+            1 = 1 * ?(90deg)
+            ? = sin
+            (Since sin(90deg) = 1)
+    [3] Y = sin(theta) * sin(phi)
+
+    Notice how these equations hold true for both cases:
+        cos(phi)  when (phi = 90) is 0
+        cos(phi)  when (phi =  0) is 1
+        sin(phi)  when (phi = 90) is 1
+        sin(phi)  when (phi =  0) is 0
+    
+    Putting it all together gives us our vector hemisphere surface in cartesian:
+    */
+    vec3 hemisphereSurface = vec3(sin(theta) * cos(phi),
+                                  sin(theta) * sin(phi),
+                                  cos(theta));
+        
+    /*
+        We've now got practically everything we need to start raytracing our sky dome properly
+        but we've got one more thing left to do before that. If I copy  the 4th condition we
+        had laid out earlier:
+            4) The camera will point towards y and encompass the whole visible sky
+
+        We see that we have already achieved what we set to do with the second part of the sentence
+        "encompass the whole visible sky" by building our hemisphere. Yet although the concept of 
+        "pointing towards y" might not be well defined we can see that the hemisphere we have built does 
+        not actually "point towards y" since most of the vectors we've created actually point around
+        and towards +Z. The reason we want to point towards +Y is arbritary, we could've easily
+        looked in some other direction, but since we're basing this on the scratchapixel tutorial
+        we'll follow in its steps.
+
+        Yet, if you look at the source code you'll notice that there is no matrix
+        transformation done to get the hemisphere to point towards Z.
+        Instead you'll notice their equation is a bit different:
+            vec3 rayDirection = vec3(sin(theta) * cos(phi),
+                                     cos(theta),
+                                     sin(theta) * sin(phi));
+
+        If you're like me you're probably thinking wait, that's illegal! They just switch y
+        and Z and called it a day! This confused the living hell out of me since it sneakily 
+        seems like a bug at first glance. Yet, after going down a rabbithole on why this works
+        I can see now that something subtle was actually going on there.
+
+        I started by wanting to write a rotation matrix that would perform the equivalent switch
+        of Y and Z but would do so "properly". This led me to s wonder about what was the
+        handedness of our coordinate system. Yet, as far as I can tell, it is ambiguous at this
+        moment. Throughout our hemisphere construction we have not performed any operation
+        that would lock us into a specific handedness. So all of the math we did up to now would
+        result in the same vector components in both left or right handed coordinate systems.
+        We've said the hemisphere cap lies in the +Z direction, but what does +Z actually mean
+        for us is still not set in stone.
+
+        All we know for sure is that the hemisphere base is in the XY plane, +X points to the
+        right, parallel to the screen width, +Y points, up parallel to the height and +Z is 
+        where the hemisphere cap resides. Yet, it is ambiguous if it points into or out of
+        the screen - only that it is perpendicular to the XY plane.
+
+        In the process of reasoning about this I have found a consistent way to determine if
+        your coordinate system is left handed or right handed, you probably already knew about 
+        this but it's here for me to never forget it:
+            1) Realize that handedness determines the result of cross products
+            2) I want my cross products to behave as I expect, which means right handed for me 
+            3) In a right handed system ixj = +k, jxk = +i, kxi= +j 
+                   i
+                  / \
+                 /   \
+                k-----j
+            4) Use the way your fingers naturally curl inwards to curl them from i towards j
+            5) The thumb now points in the direction of the cross product k (z in our case)
+            
+        I thought that working out the rotation matrices for left handed and right handed 
+        coordinate systems would finally clarify this but I had no luck at all. They are the 
+        same!
+
+        I'll give an example below with the actual rotation that we want to do to get +Z
+        pointing to our current +Y. Except that instead of rotating by -90deg we'll keep
+        it general and think of a rotation with a general angle alpha.
+        
+        Disclaimer: Angle between Z and Z' should be the same as Y and Y' but your font might 
+        make it look different, this is the angle we refer to as alpha.
+        
+        Right handed system
+                     Y 
+               Y'    ^  
+                \    |   
+                 \   |   
+                  \  |   
+                   \ | 
+       Z <-----------0
+                    /
+                   /
+                  /
+                 /
+                Z'
+
+                                   x         y'          z' 
+        RotXRightHanded(alpha) = | 1         0           0     |
+                                 | 0   cos(alpha)  -sin(alpha) |
+                                 | 0   sin(alpha)   cos(alpha) |
+
+        Left handed system
+                     Y 
+                     ^         Y'
+                     |       / 
+                     |     / 
+                     |   / 
+                     | /
+                     0-----------> Z
+                      \ 
+                       \ 
+                        \ 
+                         \
+                          Z'
+                                   x         y           z  
+        RotXLeftHanded(alpha) =  | 1         0           0     |
+                                 | 0   cos(alpha)  -sin(alpha) |
+                                 | 0   sin(alpha)   cos(alpha) |
+
+        So with that. I rest my case, I am not sure in what handedness we are in but I don't 
+        care anymore. I will figure it out later I guess. Let's now actually rotate the hemisphere
+        and see what that gets us:
+
+                                   x         y           z 
+        RotXRightHanded(-90) =   | 1         0           0 |
+                                 | 0   cos(-90)  -sin(-90) |
+                                 | 0   sin(-90)   cos(-90) |
+
+                                   x  y z 
+        RotXRightHanded(-90) =   | 1  0 0 |
+                                 | 0  0 1 |
+                                 | 0 -1 0 |
+        
+        So if we multiply this with the original hemisphereSurface(X Y Z) we get:
+            RotXRightHanded(-90) * hemisphereSurface = (X, -Z, Y)
+        As you can see this is nearly the same as what we saw in the scratchapixel code except
+        the scratchapixel code does not negate Z. I don't know why. Failing to negate an axis
+        is equivalent to performing a change of basis. The code claims they built the hemisphere
+        using left handed coordinates so this would be a legitimate way to perform both the rot
+        and the handedness change. I have not been able to determine my handedness but looking
+        at the vectors seem to indicate I am in a right handed coordinate system.
+
+        TODO
+    */
+
+    const float ang = -M_PI / 2.0;
+    const mat3 xRotMinus90 = mat3(vec3(1,     0,         0   ),  //i
+                                  vec3(0,  cos(ang), sin(ang)),  //j
+                                  vec3(0, -sin(ang), cos(ang))); //k
+    vec3 rayDirection = (xRotMinus90) * hemisphereSurface;
+
+    sunDir = normalize(vec3(sin(time), cos(time), 0.0));
+
+    /*
+        TODO
+        jump to the next section here
+    */
+    col = Render(rayOrigin, rayDirection);
+
+    GAMMA(col);
     fragColor = vec4(col, 1.0);
 }
-
-        /*
-            Shouldn't this be the same?!?!
-            col = vec3(sin(theta), 0.0, 0.0);
-            col = vec3(sin(theta), cos(theta), 0.0) * vec3(1, 0, 0);
-        */
