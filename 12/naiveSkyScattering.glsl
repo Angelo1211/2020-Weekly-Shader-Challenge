@@ -91,34 +91,67 @@ getSunLight(in vec3 ro, in vec3 rd, inout float lightRayleigh, inout float light
 		if (height < 0.)
 			return false;
 
-		lightRayleigh += exp(-height / heiR) * stepSize;
+		lightRayleigh += exp(-height / hR) * stepSize;
 		lightMie += exp(-height / hM) * stepSize;
 
-		march_pos += march_step;
+		t += stepSize;
 	}
+    return true;
 }
 vec3
 Render(vec3 ro, vec3 rd)
 {
-    //Ray setup
-    float t0, t1; //First and second intersection point, if you're inside the sphere 
+    //SKYRENDERING
+    //
+    /*
+        Ray setup
+        First and second intersection point, if you're inside the sphere the first intersection
+        point will be negative.
+    */
+    float t0, t1; 
     vec3 col;
 
     //Ray-Atmosphere intersection
     RayIntersectSphere(ro, rd, vec3(0.0), R_atmo , t0, t1);
 
-    //Determining step size 
+    //Determining step size
     const float numSamples = 16.0;
     float stepSize = t1 / float(numSamples);
 
-    //Cosine of angle between view and sun direction
+    /*
+        Cosine of angle between view and sun direction
+    */
     float mu = dot(rd, sunDir);
 
-    // Kind of like a BRDF? 
-    //TODO describe
+    /*
+        Light gets scattered in many directions at each interaction but for now we only
+        care about the proportion of light that is scattered into the eye ray. Since by 
+        definition that is the light that we can "see"
+
+        The phase function is what gives us the proportion of light that is scattered into 
+        a ray at from a given angle.
+    */
     float phaseRayleigh = rayleighPhaseFunction(mu);
     float phaseMie = henyeyGreensteinPhaseFunc(mu);
 
+    /*
+        Notice how we've got two types of phase functions as well as two types of scattering here
+        Mie and Rayleigh scattering. The scattering coefficient combined with the phase function
+        describe the proportion of incident light scattered in a given direction.
+
+        Rayleigh Scattering:
+            This is the scattering of the light caused by air molecules which are smaller than
+            10% of the wavelength of visible light. Total Rayleigh scattering depends on 
+            density of air molecules and wavelength of incident light. Light is scattered in 
+            nearly all incoming directions in equal manner. Falls at angles close to pi/2.
+            This is what is responsible for hte blue color of the sky.
+
+        Mie Scattering:
+            Scattering of light caused by aerosols, that is particles larger or equal to 10% of 
+            visible light. Aerosols are very strongly forward scattered. 
+            
+
+    */
     vec3 totalRayleigh = vec3(0.0);
     vec3 totalMie = vec3(0.0);
 
@@ -160,7 +193,8 @@ Render(vec3 ro, vec3 rd)
         currentT += stepSize;
     }
 
-    const float sun = 20.0;
+    const float sun = 8.0;
+
     return sun * (totalRayleigh * phaseRayleigh * betaR + totalMie * phaseMie * betaM );
 }
 
@@ -169,7 +203,7 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
 {
     //Init common vars
     vec3 col = vec3(0.0);
-    time = iTime / 5.0;
+    time = iTime / 10.0;
 
     /*
         INTRO
