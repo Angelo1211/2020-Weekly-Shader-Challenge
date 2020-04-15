@@ -76,6 +76,9 @@ bool
 getSunLight(in vec3 ro, in vec3 rd, inout float lightRayleigh, inout float lightMie)
 {
 
+    /*
+        Check if the ray intersects with the atmosphere but now going towards the light
+    */
     float t0, t1;
     RayIntersectSphere(ro, rd, vec3(0.0), R_atmo , t0, t1);
 
@@ -84,16 +87,25 @@ getSunLight(in vec3 ro, in vec3 rd, inout float lightRayleigh, inout float light
     float numSamples = 8.0;
 	float stepSize = t1 / numSamples;
 
-	for (int i = 0; i < int(numSamples); i++) {
+	for (int i = 0; i < int(numSamples); i++)
+    {
+        //Same position as before?
 		vec3 pos = ro + rd * (t + 0.5 * stepSize);
 		float height = length(pos) - R_earth;
 
+        /*
+            If the height goes under the ground we throw away the whole ray (what is this for?)
+        */
 		if (height < 0.)
 			return false;
 
+        //Adding the density for each one
 		lightRayleigh += exp(-height / hR) * stepSize;
 		lightMie += exp(-height / hM) * stepSize;
 
+        /*
+            Moving ray along forward
+        */
 		t += stepSize;
 	}
     return true;
@@ -149,52 +161,63 @@ Render(vec3 ro, vec3 rd)
         Mie Scattering:
             Scattering of light caused by aerosols, that is particles larger or equal to 10% of 
             visible light. Aerosols are very strongly forward scattered. 
-            
-
+            This is what is responsible for the white haze around the sun
     */
     vec3 totalRayleigh = vec3(0.0);
     vec3 totalMie = vec3(0.0);
 
     /*
-        Optical depth or average density?! 
-        TODO: Study this 
+        This will actually be the average density along the view ray for air and aerosol particles
     */
     vec3 densityRayleigh = vec3(0.0);
     vec3 densityMie = vec3(0.0);
 
+    //Our current point along the ray
     float currentT = 0.0;
     for(int i =0; i < int(numSamples); ++i)
     {
-        //TODO(AO): why 0.5? Evaluate at the middle of the step maybe?
+        //Evaluating our density at the middle point of the ray
         vec3 pos = ro + (currentT * stepSize * 0.5) * rd;
 
+        //Actual height to the surface of the earth
         float height = length(pos) - R_earth;
 
+        //Calculating the density at this given position
         float heightRayleigh = exp(-height / hR) * stepSize;
         float heightMie = exp(-height / hM) * stepSize;
 
+        /*
+            Why are we aadding height to density?!
+        */
         densityRayleigh += heightRayleigh;
         densityMie += heightMie;
 
         float lightRayleigh = 0.0;
         float lightMie = 0.0;
 
+        /*
+            This retuns if the sun is over the horizon or not
+        */
         if(getSunLight(pos, sunDir, lightRayleigh, lightMie))
         {
-            //Possible the transmittance?
+            //Calculating transmittance here
             vec3 tau = betaR * (lightRayleigh + densityRayleigh) +
                        betaM * 1.1 * (densityMie + lightMie);
-            vec3 attenuation = exp(-tau);
+            vec3 transmittance = exp(-tau);
 
-            totalRayleigh += heightRayleigh * attenuation;
-            totalMie += heightMie * attenuation;
+            //If you're above the horizon add light? transmittance?
+            //Wtf are these units
+            totalRayleigh += heightRayleigh * transmittance;
+            totalMie += heightMie * transmittance;
         }
 
+        //Move the ray forward 
         currentT += stepSize;
     }
 
     const float sun = 8.0;
 
+    //Perform the full scattering calculations for mie and rayleigh
     return sun * (totalRayleigh * phaseRayleigh * betaR + totalMie * phaseMie * betaM );
 }
 
