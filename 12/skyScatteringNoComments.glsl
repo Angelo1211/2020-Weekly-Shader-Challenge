@@ -48,11 +48,6 @@ Render(vec3 ro, vec3 rd)
     return col;
 }
 
-const float ang = -M_PI / 2.0;
-const mat3 xRotMinus90 = mat3(vec3(1,     0,         0   ),  //i
-                        vec3(0,  cos(ang), sin(ang)),  //j
-                        vec3(0, -sin(ang), cos(ang))); //k
-
 void 
 mainImage(out vec4 fragColor, in vec2 fragCoord)
 {
@@ -60,11 +55,11 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
     vec3 col = vec3(0.0);
     time = iTime / 10.0;
 
+    //Camera setup
     vec3 rayOrigin = vec3(0,  R_earth + 1.0 , 0.0 );
     vec2 uv = 2.0 *  (fragCoord - 0.5*iResolution.xy) / iResolution.y;
 
     float length2 = dot(uv, uv);
-
     const float hemisphereRadius = 1.0;
     if(length2 > hemisphereRadius)
     {
@@ -79,6 +74,7 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
                             -cos(theta),
                              sin(theta) * sin(phi));
         
+    
     col = Render(rayOrigin, rayDirection);
 
     GAMMA(col);

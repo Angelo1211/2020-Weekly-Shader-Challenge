@@ -114,7 +114,6 @@ vec3
 Render(vec3 ro, vec3 rd)
 {
     //SKYRENDERING
-    //
     /*
         Ray setup
         First and second intersection point, if you're inside the sphere the first intersection
@@ -141,7 +140,11 @@ Render(vec3 ro, vec3 rd)
         definition that is the light that we can "see"
 
         The phase function is what gives us the proportion of light that is scattered into 
-        a ray at from a given angle.
+        a ray from a given angle. 
+
+        RTR puts it as follows:
+            The phase function is expressed using the parameter theta as the angle between
+            the light forward travel path and the path towards the camera.
     */
     float phaseRayleigh = rayleighPhaseFunction(mu);
     float phaseMie = henyeyGreensteinPhaseFunc(mu);
@@ -165,7 +168,6 @@ Render(vec3 ro, vec3 rd)
     */
     vec3 totalRayleigh = vec3(0.0);
     vec3 totalMie = vec3(0.0);
-
     /*
         This will actually be the average density along the view ray for air and aerosol particles
     */
@@ -304,8 +306,8 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
             tan(phi) = y / x
         [1] phi = atan(y, x) (using atan2 syntax since it avoids negative ambiguities)
     */
-    float phi = atan(uv.y, uv.x); 
 
+    float phi = atan(uv.y, uv.x); 
     /*
         Lastly we need the zenith angle theta to complete our hemisphere in spherical coords.
         We'll need the radius R we established earlier for the the base and re-use it as the 
