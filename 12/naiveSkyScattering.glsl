@@ -16,6 +16,57 @@ vec3 sunDir = vec3(0.0);
 bool
 RayIntersectSphere(vec3 ro, vec3 rd, vec3 sOrigin, float r, inout float t0, inout float t1)
 {
+#if 1
+    //Algebra solution
+
+    /*  Equation of a sphere
+        x^2 + y^2 + z^2 = R^2
+
+        Equation of a ray
+        p = ro + t*rd 
+            t: [0, inf)
+        
+        A point
+        p = (x, y, z)
+
+        Joining point with sphere
+        p^2 - R^2 = 0.0
+        This equation is true for any point that is on the surface of a sphere
+
+        If the sphere is not in the center of the coordinate system we can offset it by the
+        distance of the center to the origin and now have all points relative to the center 
+        of the sphere instead of relative to the coordinate system origin.
+    [1] (p - cen)^2 - R^2 = 0.0
+
+        We want to check if the above equation is true for any point on a ray and we can do so
+        by substituting the equation of a ray into eq [1] like so:
+        (ro + t*rd - cen)^2 - R^2 = 0.0
+
+        Simplifying a bit we get:
+        t^2*rd^2 + 2.0*(ro-cen)*t*rd + (ro - cen)^2 - R^2 = 0.0
+
+        Which is a quadratic equation if we focus only on t:
+        A*t^2 + B*t + C = 0.0
+        Where:
+        A = rd^2
+        B = 2.0 * (ro - cen) * rd
+        C = (ro - cen)^2 - R^2
+
+        As we know quadratic equations can be solved using:
+            -B +- sqrt()
+        ----------------------------
+                    2*a
+        
+        The discriminant:
+            B^2 - 4AC
+        Tells us the following about the code:
+            A positive discriminant means there are two distinct intersection points
+            A discriminat of zero means there's only one result
+            A negative means no answer
+    */
+
+#else
+    //Geometric solution
     //Radius to sphere center
     vec3 rc = sOrigin - ro; 
 
@@ -42,6 +93,8 @@ RayIntersectSphere(vec3 ro, vec3 rd, vec3 sOrigin, float r, inout float t0, inou
     t1 = tca + thc; 
 
     return true;
+
+#endif
 }
 
 float
