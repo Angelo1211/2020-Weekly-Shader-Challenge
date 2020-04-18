@@ -8,30 +8,21 @@ const float R_atmo  = 6420e3;
 //uniforms
 float time = 0.0;
 
-//https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-sphere-intersection
 bool
 RayIntersectSphere(vec3 ro, vec3 rd, vec3 sOrigin, float r, inout float t0, inout float t1)
 {
-    //Radius to sphere center
-    vec3 rc = sOrigin - ro; 
+    ro -= sOrigin;
+    float A = dot(rd, rd);
+    float B = 2.0 * dot(ro, rd);
+    float C = dot(ro, ro) - r*r;
 
-    //Distance to closest point to center along ray
-    float tca = dot(rc, rd);
+    float discriminant = B*B - 4.0*A*C;
 
-    //If negative it means the intersection ocurred behind the ray, don't care about that 
-    if (tca < 0.0) return false;
+    //Ray never hits sphere
+    if(discriminant < 0.0) return false;
 
-    //Shortest distance from the center to the ray
-    float d2 = dot(rc, rc) - tca * tca; 
-
-    //If the shortest distance from the center to the ray is larger than the radius you missed the sphere
-    float r2 = r*r;
-    if (d2 > r2) return false; 
-
-    //We hit the sphere, update the points where we hit it
-    float thc = sqrt(r2 - d2); 
-    t0 = tca - thc; 
-    t1 = tca + thc; 
+    t0 = (-B - sqrt(discriminant)) / 2.0*A ;
+    t1 = (-B + sqrt(discriminant)) / 2.0*A ;
 
     return true;
 }
@@ -43,6 +34,7 @@ Render(vec3 ro, vec3 rd)
     float t0, t1;
     vec3 col;
 
+    //Atmosphere intersection
     if (RayIntersectSphere(ro, rd, vec3(0.0), R_atmo , t0, t1)) {col = vec3(1.0, 0.0, 0.0);}
         
     return col;

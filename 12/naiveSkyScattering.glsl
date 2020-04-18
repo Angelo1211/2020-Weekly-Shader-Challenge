@@ -53,7 +53,7 @@ RayIntersectSphere(vec3 ro, vec3 rd, vec3 sOrigin, float r, inout float t0, inou
         C = (ro - cen)^2 - R^2
 
         As we know quadratic equations can be solved using:
-            -B +- sqrt()
+            -B +- sqrt(b^2 - 4ac)
         ----------------------------
                     2*a
         
@@ -63,8 +63,23 @@ RayIntersectSphere(vec3 ro, vec3 rd, vec3 sOrigin, float r, inout float t0, inou
             A positive discriminant means there are two distinct intersection points
             A discriminat of zero means there's only one result
             A negative means no answer
-    */
 
+        We start by subtracting the sphere origin and then calculate the above as follows
+    */
+    ro -= sOrigin;
+    float A = dot(rd, rd);
+    float B = 2.0 * dot(ro, rd);
+    float C = dot(ro, ro) - r*r;
+
+    float discriminant = B*B - 4.0*A*C;
+
+    //Ray never hits sphere
+    if(discriminant < 0.0) return false;
+
+    t0 = (-B - sqrt(discriminant)) / 2.0*A ;
+    t1 = (-B + sqrt(discriminant)) / 2.0*A ;
+
+    return true;
 #else
     //Geometric solution
     //Radius to sphere center
@@ -170,42 +185,70 @@ Render(vec3 ro, vec3 rd)
     /*
         Ray setup
         First and second intersection point, if you're inside the sphere the first intersection
-        point will be negative.
+        point will be negative. We don't care about the negative intersection point since that
+        will be located behind the ray origin.
     */
     float t0, t1; 
     vec3 col;
 
-    //Ray-Atmosphere intersection
+    /*
+        //Ray-Atmosphere intersection
+        The first thing we do is check if any of our rays intersect with the atmosphere
+        and if so at what point(s). Although our demo is fairly static and looking from 
+        the gorund up only for now the model allows for looking at the sky from outside 
+        the planet too so this is definitely something we want to check for no matter what.
+    */
     RayIntersectSphere(ro, rd, vec3(0.0), R_atmo , t0, t1);
 
-    //Determining step size
+    /*
+        //Determining step size
+
+        We also need the intersection point to determine the stepsize in our raymarcher.
+        We're doing a fixed number of steps (16) but the segment from the ray origin to the 
+        atmosphere exit point might be a different length depending on the height to the ground
+        and the current angle of inclination of the sun.
+    */
     const float numSamples = 16.0;
     float stepSize = t1 / float(numSamples);
 
     /*
         Cosine of angle between view and sun direction
+        dot(a, b) = |a| |b| cos(ang)
+
+    [1] cos(ang) = dot(a,b)
+                  ----------
+                   |a| |b|
     */
     float mu = dot(rd, sunDir);
 
     /*
-        Light gets scattered in many directions at each interaction but for now we only
-        care about the proportion of light that is scattered into the eye ray. Since by 
-        definition that is the light that we can "see"
+        As light travels throughout a participating medium it will interact many times along
+        its path with the media. In each interaction the light has a chance for one of the following
+        things to occur: 
+            1) It can be redirected into moving in a different direction than it's original path.
+               An event we refer to as "Out-Scattering"
+            2) It can be absorbed during the interaction and transformed into other types of energy
+               AKA an "Absorption" event
+        
+        These two events result in a decrease of the incoming radiance but we can increase it
+        with these following two other events:
+            1) Incoming light from other rays that interact with the view ray and sactter into it
+                AKA "In-scattering"
+            2) The media itself radiates light through chemical/radiation events
+                AKA "Emmission"
+        
+        We will not be taking into account the second event, since the sky is fairly rarely on fire
+        (although it doe emit light due to insane pressures during atmospheric re-entry) and this
+        model only consider In-scattering.
 
-        The phase function is what gives us the proportion of light that is scattered into 
-        a ray from a given angle. 
+        The atmosphere surrounding the earth is a participating media composed of many different
+        size particles. For this model we consider two major particle groups only. Air, which is 
+        made of molecules significantly smaller than the wavelengths of the incoming light, 
+        and aerosols, which are particles of about the same size as the light wavelength.
 
-        RTR puts it as follows:
-            The phase function is expressed using the parameter theta as the angle between
-            the light forward travel path and the path towards the camera.
-    */
-    float phaseRayleigh = rayleighPhaseFunction(mu);
-    float phaseMie = henyeyGreensteinPhaseFunc(mu);
-
-    /*
-        Notice how we've got two types of phase functions as well as two types of scattering here
-        Mie and Rayleigh scattering. The scattering coefficient combined with the phase function
-        describe the proportion of incident light scattered in a given direction.
+        Light scattering from small air molecules is known as rayleigh scattering while scattering
+        from larger particles is known as mie scattering. Rayleigh scattering is highly wavelength
+        dependent, while Mie is not.
 
         Rayleigh Scattering:
             This is the scattering of the light caused by air molecules which are smaller than
@@ -218,9 +261,34 @@ Render(vec3 ro, vec3 rd)
             Scattering of light caused by aerosols, that is particles larger or equal to 10% of 
             visible light. Aerosols are very strongly forward scattered. 
             This is what is responsible for the white haze around the sun
+
+        *Derive the scattering equation here*
+        *What is the range of scattering 0 -1 ?*
+        *What is it even unit-wise*
+
     */
     vec3 totalRayleigh = vec3(0.0);
     vec3 totalMie = vec3(0.0);
+
+    /*
+        The phase function is what gives us the proportion of light that is scattered into 
+        a ray from a given angle. 
+
+        RTR puts it as follows:
+            The phase function is expressed using the parameter theta as the angle between
+            the light forward travel path and the path towards the camera.
+        Notice how we've got two types of phase functions as well as two types of scattering here
+        Mie and Rayleigh scattering. The scattering coefficient combined with the phase function
+        describe the proportion of incident light scattered in a given direction.
+
+    */
+    float phaseRayleigh = rayleighPhaseFunction(mu);
+    float phaseMie = henyeyGreensteinPhaseFunc(mu);
+
+    /*
+
+    */
+
     /*
         This will actually be the average density along the view ray for air and aerosol particles
     */
@@ -392,7 +460,8 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
         Scratchapixel uses acos(1.0 - length^2) but I don't think that's correct, as seen above.
             -Adding this fixes the weird permanent sunset at the edges of their model
     */
-    float theta = acos(sqrt((hemisphereRadius - length2)));
+    //float theta = acos(sqrt((hemisphereRadius - length2)));
+    float theta = acos(((hemisphereRadius - length2)));
 
     /*
         Now that we have (R, theta, phi) we have finally constructed the vectors we need to sample
@@ -592,6 +661,5 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
     */
     col = Render(rayOrigin, rayDirection);
 
-    GAMMA(col);
     fragColor = vec4(col, 1.0);
 }
