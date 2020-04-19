@@ -1,16 +1,17 @@
 #include "./common.glsl"
-/*
-    Reading this today:
-    https://www.scratchapixel.com/lessons/procedural-generation-virtual-worlds/simulating-sky/simulating-colors-of-the-sky
-*/
 
-//const variables
-const float R_earth = 6360e3;
+//const variables taken from:
+//https://www.scratchapixel.com/lessons/procedural-generation-virtual-worlds/simulating-sky/simulating-colors-of-the-sky
+const float R_earth = 6360e3; //Lengths in meters
 const float R_atmo  = 6420e3;
+const float H_Air   = 7994.0; 
+const float H_Aerosols = 1200.0; 
+const vec3 betaR = vec3(3.8e-6, 13.5e-6, 33.1e-6); // Rayleigh 
+const vec3 betaM = vec3(21e-6); // Mie
 
 //uniforms
 float time = 0.0;
-vec3 sunDir = vec3(0.0);
+vec3 sunDir = vec3(0.0); //Worldspace
 
 //https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-sphere-intersection
 bool
@@ -64,7 +65,7 @@ RayIntersectSphere(vec3 ro, vec3 rd, vec3 sOrigin, float r, inout float t0, inou
             A discriminat of zero means there's only one result
             A negative means no answer
 
-        We start by subtracting the sphere origin and then calculate the above as follows
+        We start by subtracting the sphere origin and then calculate the above as follows:
     */
     ro -= sOrigin;
     float A = dot(rd, rd);
@@ -112,36 +113,39 @@ RayIntersectSphere(vec3 ro, vec3 rd, vec3 sOrigin, float r, inout float t0, inou
 #endif
 }
 
+//From literature
 float
 rayleighPhaseFunction(float mu)
 {
     return 
           3.0 * (1.0 + mu*mu)
     / //----------------------
-                 4.0;
+            (16.0 * M_PI);
 }
 
+//From literature
 float henyeyGreensteinPhaseFunc(float mu)
 {
     const float g = 0.76;
+#if 1
+    return    
+                 3.0  * ((1.0 - g*g) * (1.0 + mu*mu))
+       / //------------------------------------------------
+       (8.0*M_PI) * ((2.0 + g*g) * pow(1.0 + g*g - 2.0*g*mu, 1.5)); 
+
+#else
 	return
 						(1. - g*g)
 	/ //---------------------------------------------
-		((4. * M_PI) * pow(1. + g*g - 2.*g*mu, 1.5));
+		((8. * M_PI) * pow(1. + g*g - 2.*g*mu, 1.5));
+#endif
 }
 
-
-// Atmosphere thickness if the density was exponential and uniform
 /*
-    Tune these numbers
+    Also raymarching but towards the light
 */
-const float hR = 7994.0; // Rayleigh
-const float hM = 1200.0; // Mie
-const vec3 betaR = vec3(5.5e-6, 13.0e-6, 22.4e-6); // Rayleigh 
-const vec3 betaM = vec3(21e-6); // Mie
-
 bool
-getSunLight(in vec3 ro, in vec3 rd, inout float lightRayleigh, inout float lightMie)
+RayMarchTowardsLight(in vec3 ro, in vec3 rd, inout float densityRayleigh, inout float densityMie)
 {
 
     /*
@@ -157,27 +161,22 @@ getSunLight(in vec3 ro, in vec3 rd, inout float lightRayleigh, inout float light
 
 	for (int i = 0; i < int(numSamples); i++)
     {
-        //Same position as before?
+        //New position along view pos to light ray
 		vec3 pos = ro + rd * (t + 0.5 * stepSize);
+
+        //Checking if the ray intersects with the ground (and hence is in shadow)
 		float height = length(pos) - R_earth;
+		if (height < 0.) return false; 
 
-        /*
-            If the height goes under the ground we throw away the whole ray (what is this for?)
-        */
-		if (height < 0.)
-			return false;
+		densityRayleigh += exp(-height / H_Air) * stepSize;
+		densityMie += exp(-height / H_Aerosols) * stepSize;
 
-        //Adding the density for each one
-		lightRayleigh += exp(-height / hR) * stepSize;
-		lightMie += exp(-height / hM) * stepSize;
-
-        /*
-            Moving ray along forward
-        */
+        //Marching along ray
 		t += stepSize;
 	}
     return true;
 }
+
 vec3
 Render(vec3 ro, vec3 rd)
 {
@@ -189,7 +188,6 @@ Render(vec3 ro, vec3 rd)
         will be located behind the ray origin.
     */
     float t0, t1; 
-    vec3 col;
 
     /*
         //Ray-Atmosphere intersection
@@ -230,8 +228,8 @@ Render(vec3 ro, vec3 rd)
             2) It can be absorbed during the interaction and transformed into other types of energy
                AKA an "Absorption" event
         
-        These two events result in a decrease of the incoming radiance but we can increase it
-        with these following two other events:
+        These two events result in a decrease of the incoming radiance but we can recover some 
+        energy by taking into account these following two other events:
             1) Incoming light from other rays that interact with the view ray and sactter into it
                 AKA "In-scattering"
             2) The media itself radiates light through chemical/radiation events
@@ -265,7 +263,6 @@ Render(vec3 ro, vec3 rd)
         *Derive the scattering equation here*
         *What is the range of scattering 0 -1 ?*
         *What is it even unit-wise*
-
     */
     vec3 totalRayleigh = vec3(0.0);
     vec3 totalMie = vec3(0.0);
@@ -286,61 +283,67 @@ Render(vec3 ro, vec3 rd)
     float phaseMie = henyeyGreensteinPhaseFunc(mu);
 
     /*
-
+        Will hold average density along the view ray for air and aerosol particles
     */
+    vec3 totalDensityAir = vec3(0.0);
+    vec3 totalDensityAerosols = vec3(0.0);
 
-    /*
-        This will actually be the average density along the view ray for air and aerosol particles
-    */
-    vec3 densityRayleigh = vec3(0.0);
-    vec3 densityMie = vec3(0.0);
-
-    //Our current point along the ray
-    float currentT = 0.0;
+    //Holds current distance travelled along the view ray
+    float currentT = 0.0; 
     for(int i =0; i < int(numSamples); ++i)
     {
-        //Evaluating our density at the middle point of the ray
-        vec3 pos = ro + (currentT * stepSize * 0.5) * rd;
+        /*
+            Evaluating our lighting contribution at the middle point
+        */
+        vec3 pos = ro + rd *(currentT + stepSize * 0.5);
 
-        //Actual height to the surface of the earth
+        //Height to the surface of the earth
         float height = length(pos) - R_earth;
 
         //Calculating the density at this given position
-        float heightRayleigh = exp(-height / hR) * stepSize;
-        float heightMie = exp(-height / hM) * stepSize;
+        /*
+            EXPLAIN:
+            Why are we multiplying by the stepsize?
+            Is this just a multiplyer for 
+        */
+        float heightAir      = exp(-height / H_Air) * stepSize;
+        float heightAerosols = exp(-height / H_Aerosols) * stepSize;
 
         /*
+            EXPLAIN
             Why are we aadding height to density?!
         */
-        densityRayleigh += heightRayleigh;
-        densityMie += heightMie;
-
-        float lightRayleigh = 0.0;
-        float lightMie = 0.0;
+        totalDensityAir      += heightAir;
+        totalDensityAerosols += heightAerosols;
 
         /*
-            This retuns if the sun is over the horizon or not
+            EXPLAIN
         */
-        if(getSunLight(pos, sunDir, lightRayleigh, lightMie))
+        float lightRayleigh = 0.0;
+        float lightMie      = 0.0;
+
+        /*
+            This retuns true if the sun is over the horizon or not
+        */
+        if(RayMarchTowardsLight(pos, sunDir, lightRayleigh, lightMie))
         {
             //Calculating transmittance here
-            vec3 tau = betaR * (lightRayleigh + densityRayleigh) +
-                       betaM * 1.1 * (densityMie + lightMie);
+            vec3 tau = betaR       * (lightRayleigh + totalDensityAir);
+            tau     += betaM * 1.1 * (lightMie      + totalDensityAerosols);
             vec3 transmittance = exp(-tau);
 
             //If you're above the horizon add light? transmittance?
             //Wtf are these units
-            totalRayleigh += heightRayleigh * transmittance;
-            totalMie += heightMie * transmittance;
+            totalRayleigh += heightAir      * transmittance;
+            totalMie      += heightAerosols * transmittance;
         }
 
-        //Move the ray forward 
+        //March along the ray
         currentT += stepSize;
     }
 
-    const float sun = 8.0;
+    const float sun = 20.0;
 
-    //Perform the full scattering calculations for mie and rayleigh
     return sun * (totalRayleigh * phaseRayleigh * betaR + totalMie * phaseMie * betaM );
 }
 
@@ -349,7 +352,7 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
 {
     //Init common vars
     vec3 col = vec3(0.0);
-    time = iTime / 10.0;
+    time = iTime / 3.0;
 
     /*
         INTRO
@@ -402,11 +405,7 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
         from [0.5, 0.5] to [-1,1] in y comes in handy.
     */
     const float hemisphereRadius = 1.0;
-    if(length2 > hemisphereRadius)
-    {
-        fragColor = vec4(0.0);
-        return;
-    }
+    if(length2 > hemisphereRadius) return;
 
     /*
         Building a hemisphere is easier in spherical coordinates. So, we're going to transform
@@ -460,8 +459,7 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
         Scratchapixel uses acos(1.0 - length^2) but I don't think that's correct, as seen above.
             -Adding this fixes the weird permanent sunset at the edges of their model
     */
-    //float theta = acos(sqrt((hemisphereRadius - length2)));
-    float theta = acos(((hemisphereRadius - length2)));
+    float theta = acos(sqrt((hemisphereRadius - length2)));
 
     /*
         Now that we have (R, theta, phi) we have finally constructed the vectors we need to sample
@@ -644,22 +642,25 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
         and the handedness change. I have not been able to determine my handedness but looking
         at the vectors seem to indicate I am in a right handed coordinate system.
 
-        TODO
     */
 
     const float ang = -M_PI / 2.0;
     const mat3 xRotMinus90 = mat3(vec3(1,     0,         0   ),  //i
                                   vec3(0,  cos(ang), sin(ang)),  //j
                                   vec3(0, -sin(ang), cos(ang))); //k
-    vec3 rayDirection = (xRotMinus90) * hemisphereSurface;
+    vec3 viewDirection_WS = (xRotMinus90) * hemisphereSurface;
 
-    sunDir = normalize(vec3(sin(time), cos(time), 0.0));
+    //vec3 ta = rayOrigin + vec3(1.0, 0.0, 0.0);
+    //viewDirection_WS = SetCamera(rayOrigin, ta, 0.0 ) * normalize(vec3(uv, 1.0));
+
+    sunDir = normalize((vec3(sin(time), abs(cos(time)), 0.0)));
 
     /*
         TODO
         jump to the next section here
     */
-    col = Render(rayOrigin, rayDirection);
+    col = Render(rayOrigin, viewDirection_WS);
 
+    GAMMA(col);
     fragColor = vec4(col, 1.0);
 }
