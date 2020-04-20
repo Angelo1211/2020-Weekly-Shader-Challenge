@@ -77,7 +77,7 @@ SetCamera(vec3 ro, vec3 ta, float roll)
         vec3 cv =          ( cross(cu,cw) );
         return mat3( cu, cv, cw );
     */
-#if 0
+#if 1
     //My version
     vec3 f, temp, r, u;
     f = normalize(ta - ro); 
@@ -125,5 +125,7 @@ CosineWeightedRay(vec3 N, float seed)
 #ifdef SHADERTOY
 #define saturate(col) clamp(col, 0.0, 1.0)
 #endif
+
+#define UV(screenCoords) vec2 uv = (-iResolution.xy + 2.0*screenCoords) / iResolution.y
 
 
