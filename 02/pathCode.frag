@@ -1,54 +1,5 @@
+#include "./common.glsl"
 #iChannel0 "self"
-
-vec2 
-rotate(vec2 a, float b)
-{
-    float c = cos(b);
-    float s = sin(b);
-    return vec2(
-        a.x * c - a.y * s,
-        a.x * s + a.y * c
-    );
-}
-
-vec2 
-uop(vec2 a, vec2 b)
-{
-    return (a.x < b.x) ? a : b;
-}
-
-float
-sdSphere(vec3 p, float r)
-{
-    return length(p) - r;
-}
-
-float 
-sdBox( vec3 p, vec3 b )
-{
-  vec3 q = abs(p) - b;
-  return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0);
-}
-
-float 
-hash(float seed)
-{
-    return fract(sin(seed)*43758.5453 );
-}
-
-mat3
-SetCamera(vec3 eye, vec3 tar, float roll)
-{
-    vec3 f, r, u;
-    f = normalize(tar - eye);
-    vec3 upRoll = normalize(vec3(sin(roll), cos(roll), 0.0));
-    r = normalize(cross(upRoll, f));
-    u = normalize(cross(f, r));
-
-    return mat3(r, u, f);
-}
-
-#define UOP(DIST, ID) res = uop(res, vec2(DIST, ID)); 
 
 #define WALL_ID 0.0
 #define LEFT_WALL_ID 1.0
@@ -131,8 +82,8 @@ GetMaterial(float id)
 {
     vec4 col = vec4(vec3(1.0), 00.0);
 
-    if(id == RIGHT_WALL_ID)  col  = vec4(1.0, 0.0, 1.0, 00.0);
-    if(id == LEFT_WALL_ID)   col  = vec4(0.0, 1.0, 1.0, 00.0);
+    if(id == RIGHT_WALL_ID)  col  = vec4(0.0, 1.0, 0.0, 00.0);
+    if(id == LEFT_WALL_ID)   col  = vec4(1.0, 0.0, 0.0, 00.0);
     if(id == LIGHT_ID)       col  = vec4(vec3(1.0), 0.6);
     if(id ==  SPHERE_ID)     col  = vec4(vec3(1.0), 0.0);
 
