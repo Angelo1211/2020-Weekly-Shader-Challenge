@@ -1,81 +1,56 @@
 //Practice sesion 0: 04/21/20
-
-mat3
-SetCamera(vec3 ro, vec3 ta, float roll)
-{
-    vec3 i, j, k, jTemp;
-    k = normalize(ta - ro);
-    jTemp = normalize(vec3(sin(roll), cos(roll), 0.0));
-    i = normalize(cross(jTemp, k));
-    j = cross(k, i);
-    return mat3(i, j , k);
-}
+//Practice sesion 1: 04/22/20
 
 float
-hash(vec2 uv)
+hash(float seed)
 {
-    return fract(sin(dot(uv,vec2(12.9898, 4.1414)))*43758.5453);
+    uvec2 p = floatBitsToUint(vec2(seed+=.1,seed+=.1));
+    p = 1103515245U*((p >> 1U)^(p.yx));
+    uint h32 = 1103515245U*((p.x)^(p.y>>3U));
+    uint n = h32^(h32 >> 16);
+    return float(n)/float(0xffffffffU);
 }
-
 
 float
 smoothNoise(vec2 uv)
 {
     vec2 id = floor(uv);
-    vec2 fv = fract(uv);
-    fv = fv*fv *(3.0 - 2.0 *fv);
+    vec2 fr = fract(uv);
 
-    //bl: bottom left
-    float bl = hash(id);
-    float br = hash(id + vec2(1.0, 0.0));
-    float b = mix(bl, br, fv.x);
-
-    float tl = hash(id + vec2(0.0, 1.0));
-    float tr = hash(id + vec2(1.0, 1.0));
-    float t = mix(tl, tr, fv.x);
-
-    return mix(b, t, fv.y);
+    return hash(dot(uv, vec2(12.9898, 78.233)));
 }
 
 float
-ValueNoise(vec2 uv, int octaves){
-    float amplitude = 1.0;
-    float frequency = 1.0;
-    float noise = 0.0;
-    float totalAmp = 0.0;
+valueNoise(vec2 uv, int octaves)
+{
+    float noise;
 
-    for(int i = 0; i < octaves; ++i){
-        noise += smoothNoise(uv * frequency) * amplitude;
-        totalAmp += amplitude;
-        amplitude /= 2.0;
-        frequency *= 2.0;
-    }
+    noise = smoothNoise(uv);
 
-    return noise / totalAmp ;
+    return noise;
 }
 
 float
 terrain(vec3 p)
 {
-    return p.y - valueNoise(p.xz, 8.0);
+    return p.y - valueNoise(p.xz, 8);
 }
 
 #define MAX_STEPS 200
-#define MIN_DIST 0.001
 #define MAX_DIST 200.0
-#define SLOW_DOWN 1.0
+#define MIN_DIST 0.001
 float
 intersectTerrain(vec3 ro, vec3 rd)
 {
-    float t = 0.0;
+    float t;
 
     for(int i = 0; i < MAX_STEPS && t < MAX_DIST; ++i)
     {
         float h = terrain(ro + t*rd);
 
-        if(abs(h) < MIN_DIST*t) break;
+        if(abs(h) < t*MIN_DIST) break;
 
-        t += SLOW_DOWN * h;
+        t += h;
     }
 
     return t;
@@ -84,28 +59,40 @@ intersectTerrain(vec3 ro, vec3 rd)
 vec3
 Render(vec3 ro, vec3 rd)
 {
-    //Terrain Raymarch
+    vec3 col;
+    //Terrain Rendering
     float t = intersectTerrain(ro, rd);
 
-    t /= 100.0;
+    col += t / 100.0;
 
-    return vec3(t);
+    return saturate(col);
+}
+
+mat3
+SetCamera(vec3 eye, vec3 target, float roll)
+{
+    vec3 i, j, k, temp;
+    k = normalize(target - eye);
+    temp = normalize(vec3(sin(roll), cos(roll), 0.0));
+    i = normalize(cross(temp, k));
+    j =           cross(k, i);  
+    return mat3(i, j , k);
 }
 
 #define INV_GAMMA 0.454545
 void
 mainImage(out vec4 fragColor, in vec2 fragPos)
 {
-    float nearp = 1.0;
     float roll = 0.0;
-
+    float nearP = 1.0;
     vec3 ta = vec3(0.0);
-    vec3 ro = ta + vec3(0.0, 3.0, -10.0); 
+    vec3 ro = ta + vec3(0.0, 5.0, -10.0);
     vec2 uv = (2.0 * (fragPos) - iResolution.xy) / iResolution.y;
     mat3 cam2World = SetCamera(ro, ta, roll);
-    vec3 rd = cam2World * normalize(vec3(uv, nearp));
+    vec3 rd = cam2World * normalize(vec3(uv, nearP));
 
-    vec3 col = Render(ro, rd);
+    vec3 col;// = Render(ro, rd);
+    col += hash(dot(uv, vec2(12.9898, 78.233)));
 
     col = pow(col, vec3(INV_GAMMA));
     fragColor = vec4(col, 1.0);
