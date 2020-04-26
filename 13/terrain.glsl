@@ -35,7 +35,7 @@ terrain(vec2 uv)
     float freq = 1.0;
     return sin(iTime + uv.x);
     #else
-        float TERRAIN_FREQ = 0.1;
+        float TERRAIN_FREQ = 1.0;
         float TERRAIN_HEIGHT = 0.3;
         const mat2 m2 = mat2(0.8,-0.6,0.6,0.8);
 
