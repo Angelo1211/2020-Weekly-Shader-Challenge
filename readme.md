@@ -2,6 +2,9 @@
 
 Hi! Here's a collection of the shaders I'm writing for my weekly shader challenge. I write most of these in visual studio code (using the [VSCode shadertoy extension](https://marketplace.visualstudio.com/items?itemName=stevensona.shader-toy)) and then upload them to shadertoy so people can check them out. I'm using a beefy GPU to render these, so ms count may vary. Here's what I've done so far:
 
+### Week 13:
+[![Simple Terrain](https://user-images.githubusercontent.com/11263073/80307500-5d2eaf80-87c1-11ea-94da-0e95f732149f.png)](https://www.shadertoy.com/view/tsXBzM)
+
 ### Week 12:
 [![Sky Scattering](https://user-images.githubusercontent.com/11263073/79693620-94eaa400-8263-11ea-9648-5c0bc89d953c.png)](https://www.shadertoy.com/view/WdByDV)
 
