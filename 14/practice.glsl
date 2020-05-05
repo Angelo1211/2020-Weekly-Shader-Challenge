@@ -3,122 +3,158 @@
 //Practice 2: 30/04/20 (23m)
 //Practice 3: 02/05/20
 //Practice 4: 03/05/20
+//Practice 5: 04/05/20
+//Practice 5: 05/05/20
 
-#iChannel0 "./textures/MediumNoise.png"
-#iChannel0::WrapMode "Repeat"
+#iChannel0 "./textures/mediumNoise.png"
+#include "./hashes.glsl"
 
-vec3 
+#define USE_NOISE_TEXTURE 0
+vec3
 dNoise2D(vec2 uv)
 {
-    ivec2 id = ivec2(floor(uv));
+    vec2 id = floor(uv);
+    ivec2 i_id = ivec2(id);
     vec2 fr = fract(uv);
 
-    //Cubic interpolation
-    vec2 interp = fr*fr*(3.0-2.0*fr);
-    vec2 dInterp = 6.0*fr*(1.0-fr);
+    vec2 interp = fr*fr*(3.0 - 2.0*fr);
+    vec2 dInterp = 6.0*fr*(1.0 - fr);
+    
+    float bl = 0.0;
+    float br = 0.0;
+    float tl = 0.0;
+    float tr = 0.0;
 
-    //bottom
-    float bl = texelFetch(iChannel0, id + ivec2(0, 0)&255, 0).x; //a
-    float br = texelFetch(iChannel0, id + ivec2(1, 0)&255, 0).x; //b
+#if USE_NOISE_TEXTURE
+    bl = texelFetch(iChannel0, i_id + ivec2(0, 0)&255, 0).x;
+    br = texelFetch(iChannel0, i_id + ivec2(1, 0)&255, 0).x;
+
+    tl = texelFetch(iChannel0, i_id + ivec2(0, 1)&255, 0).x;
+    tr = texelFetch(iChannel0, i_id + ivec2(1, 1)&255, 0).x;
+#else 
+    bl = hash12(id + vec2(0.0, 0.0));
+    br = hash12(id + vec2(1.0, 0.0));
+
+    tl = hash12(id + vec2(0.0, 1.0));
+    tr = hash12(id + vec2(1.0, 1.0));
+#endif
+
     float b = mix(bl, br, interp.x);
-
-    //Top
-    float tl = texelFetch(iChannel0, id + ivec2(0, 1)&255, 0).x; //c
-    float tr = texelFetch(iChannel0, id + ivec2(1, 1)&255, 0).x; //d
     float t = mix(tl, tr, interp.x);
 
-    //bilinear filtering
     float noise = mix(b, t, interp.y);
+    vec2 derivatives = dInterp * (vec2(br - bl, tl - bl) + (bl - br - tl +tr) * interp.yx);
 
-    //check mathematica doc
-    vec2 derivatives = dInterp*(vec2(br - bl, tl-bl) + (bl - br - tl + tr) *interp.yx);
     return vec3(noise, derivatives);
 }
 
 mat3
 SetCamera(vec3 eye, vec3 target, float roll)
 {
-    vec3 temp, i, j, k;
-
-    temp = normalize(vec3(sin(roll), cos(roll), 0.0));
-    k = normalize(target - eye);
-    i = normalize(cross(temp, k));
-    j = cross(k , i);
-
-    return mat3(i, j , k);
+    vec3 temp = normalize(vec3(sin(roll), cos(roll), 0.0));
+    vec3 k = normalize(target - eye);
+    vec3 i = normalize(cross(temp, k));
+    vec3 j = cross(k , i);
+    return mat3(i, j, k);
 }
 
-const mat2 m2 = mat2(0.8,-0.6,0.6,0.8);
+//Rotating the query position at each noise layer
+mat2 layerRot = mat2(0.8, -0.6, 0.6, 0.8);
 
-float
-terrainM(vec3 x)
+#define TERRAIN_HEIGHT 3.0
+#define TERRAIN_FREQUENCY 0.2
+vec3
+terrainNoise(vec2 uv, int octaves)
 {
-    float SC = 250.0;
-	vec2  p = x.xz*0.003/SC;
-    float a = 0.0;
-    float b = 1.0;
-	vec2  d = vec2(0.0);
-    for( int i=0; i<9; i++ )
+    vec2 x = uv * TERRAIN_FREQUENCY;
+    float noise = 0.0;
+    const float frequency = 2.0;
+    float amplitude = 1.0;
+    vec2 derivatives = vec2(0.0);
+
+    for(int i = 0; i < octaves; ++i)
     {
-        vec3 n = dNoise2D(p);
-        d += n.yz;
-        a += b*n.x/(1.0+dot(d,d));
-		b *= 0.5;
-        p = m2*p*2.0;
-    }
-    return x.y - a;
+        vec3 n = dNoise2D(x);
+        derivatives += n.yx;
+        noise += (n.x * amplitude)/ (1.0 + dot(derivatives, derivatives));
+        amplitude *= 0.5;
+        x *= layerRot * frequency;
+    }   
+
+    return vec3(noise * TERRAIN_HEIGHT, derivatives);
 }
 
-#define MAX_DIST 2000.0
+vec3
+terrain(vec3 p)
+{
+    int lod = 8;
+    vec3 terrainWDerivatives = vec3(p.y, vec2(0.0));
+    return terrainWDerivatives + terrainNoise(p.xz, lod);
+}
+
 #define MAX_STEPS 200
+#define MAX_DIST 200.0
 #define MIN_DIST 0.001
-float
-intersect(vec3 ro, vec3 rd)
+vec3
+RaymarchTerrain(vec3 ro, vec3 rd)
 {
     float t = 0.0;
+    vec2 normals = vec2(0.0);
 
     for(int i = 0; i < MAX_STEPS && t < MAX_DIST; ++i)
     {
-        float h = terrainM(ro + t*rd);
+        vec3 h = terrain(ro + rd*t);
 
-        if(abs(h) < t* MIN_DIST) break;
+        if(abs(h.x) < t * MIN_DIST)
+        {
+            normals = h.yz;
+            break;
+        } 
 
-        t +=h;
+        t += 0.4*h.x;
     }
 
-    return t;
+    return vec3(t, normals);
 }
 
 vec3
 Render(vec3 ro, vec3 rd)
 {
-    vec3 col;
+    vec3 col = vec3(0.0);
 
-    float t = intersect(ro, rd);
+    vec3 res = RaymarchTerrain(ro, rd);
+    float t = res.x;
 
-    col += t;
+    vec3 P = ro + t*rd;
+    vec3 N = normalize(vec3(-res.y, 1.0 , -res.z));
+    vec3 L = normalize(vec3(1.0, 1.0, 0.0));
 
-    return col;
+    float diff = saturate(dot(N, L));
+
+    col += diff * vec3(1.0, 1.0, 1.0);
+
+    return (col);
 }
-
 
 #define INV_GAMMA 0.454545
 void
 mainImage(out vec4 fragColor, in vec2 fragCoord)
 {
-    //camera
-    vec2 uv = ((fragCoord) - 0.5*iResolution.xy)/ iResolution.y;
+    //Camera setup
     float nearp = 1.0;
     float roll = 0.0;
-    vec3 ta = vec3(0.0, 2.0, 0.0);
-    vec3 ro = ta + vec3(0.0, 0.0, -10.0);
-    mat3 cam = SetCamera(ro, ta , roll);
-    vec3 rd = cam * normalize(vec3(uv, nearp));
+    vec3 ta = vec3(0.0, 0.0, 0.0);
+    vec3 ro = ta + vec3(0.0, 2.0, -10.0);
+    vec2 uv = ((fragCoord) - 0.5*iResolution.xy)/iResolution.y;
+    mat3 cam = SetCamera(ro, ta, roll);
+    vec3 rd = cam*normalize(vec3(uv, nearp));
 
     vec3 col = Render(ro, rd);
-    //col = vec3(texelFetch(iChannel0, ivec2(fragCoord)&255, 0).x);
-    //col = vec3(dNoise2D(uv*20.0));
-
+    //Testing noise
+    //col = vec3(texelFetch(iChannel0, ivec2(fragCoord)&255, 0)); //texture
+    //col = vec3(hash12(uv)); //hash based noise
+    //col = vec3(dNoise2D(uv* 20.0).x); //Filtered noise 
+    //col = vec3(dNoise2D(uv * 20.0)); //Filtered noise  with derivatives
 
     //col = pow(col, vec3(INV_GAMMA));
     fragColor = vec4(col, 1.0);
