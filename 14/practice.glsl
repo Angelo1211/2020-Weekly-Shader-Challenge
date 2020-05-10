@@ -6,69 +6,43 @@
 //Practice 5: 04/05/20
 //Practice 6: 05/05/20
 //Practice 7: 06/05/20
+//Practice 8: 10/05/20
 
-#iChannel0 "./textures/mediumNoise.png"
 #include "./hashes.glsl"
+#iChannel0 "./textures/mediumNoise.png"
+#define USE_NOISE_TEXTURE 0
 
-#define USE_NOISE_TEXTURES 1
 vec3
 dNoise2D(vec2 uv)
 {
     vec2 id = floor(uv);
+    ivec2 iId = ivec2(id);
     vec2 fr = fract(uv);
-    ivec2 intId = ivec2(id);
 
-    vec2 interp = fr * fr * (3.0 - 2.0*fr);
+    vec2 interp = fr*fr*(3.0 - 2.0*fr);
     vec2 dInterp = 6.0*fr*(1.0 - fr);
 
-    float bl = 0.0;
-    float br = 0.0;
-    float tl = 0.0;
-    float tr = 0.0;
+    float bl, br, tl, tr;
+#if USE_NOISE_TEXTURE 
+    bl = texelFetch(iChannel0, (iId + ivec2(0, 0))&255, 0).x;
+    br = texelFetch(iChannel0, (iId + ivec2(1, 0))&255, 0).x;
 
-#if USE_NOISE_TEXTURES
-    bl = texelFetch(iChannel0, (intId + ivec2(0, 0))&255, 0).x;
-    br = texelFetch(iChannel0, (intId + ivec2(1, 0))&255, 0).x;
-    tl = texelFetch(iChannel0, (intId + ivec2(0, 1))&255, 0).x;
-    tr = texelFetch(iChannel0, (intId + ivec2(1, 1))&255, 0).x;
+    tl = texelFetch(iChannel0, (iId + ivec2(0, 1))&255, 0).x;
+    tr = texelFetch(iChannel0, (iId + ivec2(1, 1))&255, 0).x;
 #else
     bl = hash12(id + vec2(0.0, 0.0));
     br = hash12(id + vec2(1.0, 0.0));
     tl = hash12(id + vec2(0.0, 1.0));
     tr = hash12(id + vec2(1.0, 1.0));
 #endif
-
     float b = mix(bl, br, interp.x);
     float t = mix(tl, tr, interp.x);
 
     float noise = mix(b, t, interp.y);
 
-    vec2 derivatives = dInterp *(vec2(br - bl, tl -bl) + (bl -br -tl + tr) * interp.yx);
+    vec2 derivatives = dInterp*(vec2(br - bl,tl -bl) + (bl - br - tl + tr)* interp.yx);
 
     return vec3(noise, derivatives);
-}
-
-#define TERRAIN_HEIGHT 8.0
-#define TERRAIN_FREQUENCY 0.1
-vec3
-dFBMNoise(vec2 uv, int octaves )
-{
-    const mat2 layerRotation = mat2(0.8, -0.6, 0.6, 0.8);
-    vec2 x = uv * TERRAIN_FREQUENCY ;
-    float noise = 0.0;
-    float amplitude = 1.0;
-    const float frequency = 2.0;
-    vec2 derivatives = vec2(0.0);
-    for(int i = 0; i < octaves;++i)
-    {
-        vec3 res = dNoise2D(x);
-        derivatives +=res.yz;
-        noise += amplitude * res.x / (1.0 + dot(derivatives, derivatives));
-        amplitude *= 0.5;
-        x = layerRotation * x * frequency;
-    }
-
-    return vec3(noise * TERRAIN_HEIGHT, derivatives);
 }
 
 mat3
@@ -76,42 +50,75 @@ SetCamera(vec3 eye, vec3 target, float roll)
 {
     vec3 temp = normalize(vec3(sin(roll), cos(roll), 0.0));
 
-    vec3 k = normalize(target - eye);
+    vec3 k = normalize(target -eye);
     vec3 i = normalize(cross(temp, k));
     vec3 j = cross(k, i);
 
-    return mat3(i, j , k);
+    return mat3(i,j,k);
 }
 
-vec3
+const mat2 rotationMatrix = mat2(0.8, -0.6, 0.6, 0.8);
+
+#define TERRAIN_HEIGHT 250.0
+#define TERRAIN_FREQUENCY 0.15;
+float
+dValueNoise(vec2 uv, int octaves)
+{
+    vec2 x = uv * 0.03* TERRAIN_FREQUENCY;
+    float noise = 0.0;
+    float amplitude = 1.0;
+    float frequency = 2.0;
+    vec2 derivatives = vec2(0.0);
+    float erosion = 1.0;
+
+    for(int i = 0; i < octaves; ++i)
+    {
+        vec3 res = dNoise2D(x);
+        derivatives += res.yz;
+        noise += (res.x * amplitude) / (1.0 + erosion*dot(derivatives, derivatives)); 
+        amplitude *= 0.5;
+        x = rotationMatrix * x * frequency;
+    }
+
+    return noise * TERRAIN_HEIGHT;
+}
+
+float
 terrain(vec3 p, int lod)
 {
-    return p.y - dFBMNoise(p.xz, lod);
+    return p.y - dValueNoise(p.xz, lod);
 }
 
-#define MAX_STEPS 200
-#define MIN_DIST 0.001
+
 #define MAX_DIST 200.0
-vec3
+#define MIN_DIST 0.001
+#define MAX_STEPS 200
+float
 intersectTerrain(vec3 ro, vec3 rd)
 {
-    const int lod = 8;
-    vec3 res = vec3(-1.0);
     float t = 0.0;
 
     for(int i = 0; i < MAX_STEPS && t < MAX_DIST; ++i)
     {
-        vec3 hit = terrain(ro + t*rd, lod);
+        const int lod = 10;
+        float h = terrain(ro + t*rd, lod);
 
-        if(abs(hit.x) < t*MIN_DIST)
-        {
-            res = vec3(t, hit.yz);
-            break;
-        }
-        t += 0.4*hit.x;
+        if(abs(h) < t*MIN_DIST) break;
+
+        t += 0.3*h; //Sphere march but take only 40% of the largest possible step
     }
 
-    return res;
+    return t;
+}
+
+vec3
+CalcNormal(vec3 p)
+{
+    vec2 e = vec2(0.001, 0.0);
+    const int lod = 8;
+    return normalize(vec3(terrain(p + e.xyy, lod) - terrain(p - e.xyy, lod), 
+                          terrain(p + e.yxy, lod) - terrain(p - e.yxy, lod),
+                          terrain(p + e.yyx, lod) - terrain(p - e.yyx, lod)));
 }
 
 vec3
@@ -119,42 +126,40 @@ Render(vec3 ro, vec3 rd)
 {
     vec3 col = vec3(0.0);
 
-    vec3 res = intersectTerrain(ro, rd);
-    float t = res.x;
-    if(t < 0.0) return vec3(1.0);
-    vec2 dTerrain = res.yz;
-    vec3 P = ro + t*rd;
-    vec2 norm = terrain(P, 8).yz;
-    vec3 N = normalize(vec3(norm.x, 0., norm.y));
-    vec3 L = normalize(vec3(1.0, 1.0, 0.0));
+    {
+        float t = intersectTerrain(ro, rd);
+        vec3 P = ro + t*rd;
+        vec3 N = CalcNormal(P);
+        vec3 L = normalize(vec3(1.0, 1.0, 0.0));
+        float diff = saturate(dot(N, L));
+        col = 1.0 * diff * vec3(0.9, 0.8, 1.0); 
+    }
 
-    col += saturate(dot(L, N));
 
     return col;
 }
 
-#define INV_GAMMA 0.45454545
+#define INV_GAMMA 0.454545454
 void
 mainImage(out vec4 fragColor, in vec2 fragCoord)
 {
-    //camera
-    float nearp = 0.4;
+    //Camera setup
+    float nearp = 1.0;
     float roll = 0.0;
-    vec3 ta = vec3(iTime, 0.0, iTime);
-    vec3 ro = ta + vec3(0.0, 10.0, -200.0);
-    vec2 uv = ((2.0*fragCoord) - iResolution.xy)/iResolution.y;
+    vec3 ta = vec3(0.0, 0.0, 0.0 + iTime);
+    vec3 ro = ta + vec3(0.0, 4.0, -10.0);
+    vec2 uv = (2.0*(fragCoord) - iResolution.xy)/iResolution.y;
     mat3 cam = SetCamera(ro, ta, roll);
-    vec3 rd = cam*normalize(vec3(uv, nearp));
+    vec3 rd = cam * normalize(vec3(uv, nearp));
 
     vec3 col = Render(ro, rd);
-    //noise tests
+    //Noise testing
     //uv *= 20.0;
-    //col = vec3(hash12(uv));//by hash
-    //col = vec3(texelFetch(iChannel0, ivec2(fragCoord)&255, 0).x);//by texture
-    //col = vec3(dNoise2D(uv).x); //Smooth noise only 
-    //col = dNoise2D(uv); //Smooth noise with derivatives 
-    //col = vec3(dFBMNoise(uv, 8).x);
+    //col = vec3(hash12(uv)); //Hash based noise
+    //col = vec3(texelFetch(iChannel0, ivec2(fragCoord)&255, 0).x);//texture based noise 
+    //col = vec3(dNoise2D(uv).x); //Value noise 
+    //col = vec3(dNoise2D(uv)); //Value noise w/ derivatives
 
-    //col = pow(col, vec3(INV_GAMMA));
+    col = pow(col, vec3(INV_GAMMA));
     fragColor = vec4(col, 1.0);
 }
