@@ -136,10 +136,11 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
 {
     //Init common vars
     time = iTime / 10.0;
+    sunDir = normalize(vec3(sin(time), abs(cos(time)) - 0.2, 0.0));
+
     const bool fishEye = true;
     const bool mouseControl = false;
 
-    sunDir = normalize(vec3(sin(time), abs(cos(time)) - 0.2, 0.0));
     if(mouseControl)
         sunDir = normalize(vec3(iMouse.xy,0.0));
     
