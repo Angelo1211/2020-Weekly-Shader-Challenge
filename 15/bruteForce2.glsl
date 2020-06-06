@@ -1,17 +1,35 @@
 #include "./hashes.glsl"
 
 // const data
-const float R_earth = 6360e3;
-const float R_atmo = 6420e3;
-const float M_PI = 3.14159265352;
+const float R_atmo        = 6420e3;
+const float R_earth       = 6360e3;
+const float R_atmo_height = R_atmo - R_earth;
+const float M_PI          = 3.14159265352;
 
-const float S_Luminance = 2e10;
-const vec3 Beta_R = vec3(6.55e-6f, 1.73e-5f, 2.30e-5f);
+//TODO Get a better approx
+#if 1
+const vec3 S_Luminance = vec3(30);
+#else
+const vec3 S_Luminance = 1e1 * vec3(0.98, 0.83, 0.25);
+#endif
+
+vec3 gamma = vec3(6.5e-7, 5.1e-7, 4.75e-7);
+
+#if 0
+// Bodare paper
+vec3 Beta_R = vec3(6.55e-6, 1.73e-5, 2.30e-5);
+#else
+// Frostbite sky 
+vec3 Beta_R = vec3(5.8e-6, 1.35e-5, 3.31e-5);
+#endif
+
+
 const vec3 Beta_M = vec3(2.0e-6);
 
-const float NumSamples = 16.0;
-const float H_Air = 7994.0;
-const float H_Aerosols = 1200.0;
+const float H_Mie      = 1200.0;
+const float H_Rayleigh = 8000.0;
+
+const int NumSamples   = 32;
 
 // uniforms
 float time = 0.0;
@@ -29,8 +47,8 @@ SetCamera(vec3 eye, vec3 target, float roll)
     return mat3(i, j, k);
 }
 
-vec3 
-RayIntersectSphere(vec3 ro, vec3 rd, vec3 sOrigin, float r, inout float t0, inout float t1)
+vec2 
+RayIntersectSphere(vec3 ro, vec3 rd, vec3 sOrigin, float r)
 {
     ro -= sOrigin;
     float A = dot(rd, rd);
@@ -40,12 +58,12 @@ RayIntersectSphere(vec3 ro, vec3 rd, vec3 sOrigin, float r, inout float t0, inou
 
     // Ray never hits sphere
     if (discriminant < 0.0)
-         return vec3(-1.0);
+         return vec2(-1.0);
 
-    t0 = (-B - sqrt(discriminant)) / 2.0 * A;
-    t1 = (-B + sqrt(discriminant)) / 2.0 * A;
+    float t0 = (-B - sqrt(discriminant)) / 2.0 * A;
+    float t1 = (-B + sqrt(discriminant)) / 2.0 * A;
 
-    return ro + t1*rd;
+    return vec2(t0, t1);
 }
 
 float 
@@ -63,40 +81,55 @@ henyeyGreensteinPhaseFunc(float cosTheta)
 
     return            3.0*(1.- g*g) * (1.0 + cosTheta * cosTheta)  
     / //----------------------------------------------------------------------
-            ((4. * M_PI) * pow(1. + g*g - 2.*g*(cosTheta* cosTheta), 1.5));
+            (2.0*(2.0 + g*g) * pow(1. + g*g - 2.*g*(cosTheta * cosTheta), 1.5));
+}
+
+float
+GetHeight(vec3 p)
+{
+    #if 1
+    return clamp(length(p) - R_earth, 0.0, R_atmo_height);
+    #else 
+    return (length(p) - R_earth);
+    #endif
 }
 
 vec2
-GetDensity(vec3 p)
+GetDensity(float h)
 {
-    float h = length(p) - R_earth;
+    float rayleighDensity = exp(-h / H_Rayleigh);
+    float mieDensity      = exp(-h / H_Mie);
 
-    // returns vec2(Density Rayleigh, Density Mie)
-    return exp(- h / vec2(H_Air, H_Aerosols));
+    return vec2(rayleighDensity, mieDensity);
 }
 
 vec3
 Transmittance(vec3 P_a, vec3 P_b)
 {
-    float stepSize_t = length(P_b - P_a) / NumSamples;
+    float rayLength = length(P_b - P_a);
+    float stepSize_t =  rayLength / float(NumSamples);
+    //NOTE: Direction does not matter for integration purposes
+    vec3 rd = (P_b - P_a) / rayLength;
 
-    // vec2(Rayleigh, Mie)
-    vec2 totalDensity = vec2(0.0);
-    vec2 previousDensity = vec2(0.0);
-    vec2 currentDensity = vec2(0.0);
+    //                     vec2(Rayleigh, Mie)
+    vec2 totalDensity    = vec2(0.0);
+    vec2 currentDensity  = vec2(0.0);
 
-    vec3 rd = normalize(P_b - P_a);
-    for(float step_t = 0.0; step_t < NumSamples; ++step_t )
+    vec2 previousDensity = GetDensity(GetHeight(P_a));
+    for(int step_t = 1; step_t < NumSamples; ++step_t )
     {
-        vec3 pos_t = P_a + rd * (stepSize_t * step_t);
-        currentDensity = GetDensity(pos_t);
+        vec3 pos_t = P_a + rd * (stepSize_t * float(step_t));
 
-        totalDensity += (currentDensity + previousDensity)/ (2.0 * stepSize_t);
+        //Make sure you don't intersect with the earth
+        float h = GetHeight(pos_t);
+        currentDensity = GetDensity(h);
+
+        totalDensity += stepSize_t * (currentDensity + previousDensity) / 2.0;
 
         previousDensity = currentDensity;
     }
 
-    return exp(-(totalDensity.x * Beta_R + totalDensity.y * Beta_M) );
+    return exp(-(totalDensity.x * Beta_R + totalDensity.y * Beta_M/0.9) );
 }
 
 vec3
@@ -111,45 +144,61 @@ SingleScattering(vec3 ro, vec3 rd)
                       Integral_M( from(P_a, P_b) of ( density_M(height(p)) * T(P_C, P) * T(P, P_A) ) WRT(P))
     */
     vec3 Integral_R = vec3(0.0);
-    vec3 current_R = vec3(0.0);
-    vec3 previous_R = vec3(0.0);
-
+    vec3 current_R  = vec3(0.0);
     vec3 Integral_M = vec3(0.0);
-    vec3 current_M = vec3(0.0);
-    vec3 previous_M = vec3(0.0);
+    vec3 current_M  = vec3(0.0);
+
+    /*
+            @BUG-FREE ZONE@
+                yeay
+    */
 
     // Setting up view ray values
-    float t0_V = 0.0;
-    float t1_V = 0.0;
+    vec2 atmoHit_V   = RayIntersectSphere(ro, rd, vec3(0.0), R_atmo);
+    vec2 groundHit_V = RayIntersectSphere(ro, rd, vec3(0.0), R_earth);
+    vec2 atmoHit_S   = RayIntersectSphere(ro, sunDir, vec3(0.0), R_atmo);
 
-    float t0_S = 0.0;
-    float t1_S = 0.0;
+    vec2 density_Start = GetDensity(GetHeight(ro));
+    vec3 transmittance = exp(-(density_Start.x * Beta_R + density_Start.y * Beta_M )); 
+    transmittance *= Transmittance(ro, ro + sunDir * atmoHit_S.y);
 
-    // Early rejection if your ray is outside of the earth
-    RayIntersectSphere(ro, rd, vec3(0.0), R_atmo, t0_V, t1_V);
+    vec3 previous_R = density_Start.x * transmittance;
+    vec3 previous_M = density_Start.y * transmittance;
+
+    //TODO rayLength is a t, not really a length in (m)
+    // Actually maybe it is? ( follow the derivation of line 159/160)
+    float rayLength = atmoHit_V.y;
+
+    if(groundHit_V.x > 0.0)
+        rayLength = groundHit_V.x;
+
+#if 1 
+    float stepSize_V = rayLength / float(NumSamples);
+#else
+    vec3 Pb = ro + rd*rayLength;
+    float stepSize_V = length(Pb - ro) / float(NumSamples);
+#endif
 
     // Ray marching -> view ray
-    vec3 transmittance =  vec3(0.0);
-    float stepSize_V = t1_V / NumSamples;
-
-    for(float step_v = 0.0; step_v < NumSamples; ++step_v )
+    for(int step_v = 1; step_v < NumSamples; ++step_v )
     {
-        vec3 pos_V = ro + rd * (stepSize_V * step_v);
-        vec2 den_V = GetDensity(pos_V);
+        vec3 pos_V = ro + rd * (stepSize_V * float(step_v));
+        float h = GetHeight(pos_V);
+        //if(h == 0.0) return vec3(1.0, 0.0, 0.0);
+        vec2 den_V = GetDensity(h);
 
-        // view ray -> sun 
-        vec3 hit_S = RayIntersectSphere(pos_V, sunDir, vec3(0.0), R_atmo, t0_S, t1_S);
-
-        transmittance = Transmittance(ro, pos_V) * Transmittance(pos_V, hit_S);
+        // current pos -> sun 
+        vec3 transmittance = Transmittance(ro, pos_V);
+        transmittance *= Transmittance(pos_V, pos_V + sunDir*atmoHit_S.y);
 
         current_R = den_V.x * transmittance;
         current_M = den_V.y * transmittance;
 
-        Integral_R = (current_R + previous_R) / (2.0 * stepSize_V);
-        Integral_M = (current_M + previous_M) / (2.0 * stepSize_V);
+        Integral_R += stepSize_V * (current_R + previous_R) / 2.0;
+        Integral_M += stepSize_V * (current_M + previous_M) / 2.0;
 
-        previous_M = current_M;
         previous_R = current_R;
+        previous_M = current_M;
     }
     
     /*
@@ -162,10 +211,11 @@ SingleScattering(vec3 ro, vec3 rd)
     float Phase_M = henyeyGreensteinPhaseFunc(cosTheta_v);
 
 #if 0
-    return S_Luminance * ( (Phase_R * ( Beta_R / 4.0 * M_PI) * Integral_R ) );
+    return S_Luminance * ( 
+                           (Phase_M * ( Beta_M / (4.0 * M_PI)) * Integral_M ) );
 #else
-    return S_Luminance * ( (Phase_R * ( Beta_R / 4.0 * M_PI) * Integral_R ) +
-                           (Phase_M * ( Beta_M / 4.0 * M_PI) * Integral_M ) );
+    return S_Luminance * ( (Phase_R * ( Beta_R / (4.0 * M_PI)) * Integral_R ) +
+                           (Phase_M * ( Beta_M / (4.0 * M_PI)) * Integral_M ) );
 #endif
 }
 
@@ -177,26 +227,34 @@ MultiScattering(vec3 ro, vec3 rd, int bounces)
     return ro;
 }
 
-
 #define INV_GAMMA 0.454545
 void
 mainImage(out vec4 fragColor, in vec2 fragCoord)
 {
-    //Random val per pixel per frame
-    float seed = hash11(dot(vec2(12.9898, 78.233),fragCoord) + 1113.1*float(iFrame));
+    vec3 col = vec3(0.0);
 
     // Init common vars
-    time = iTime / 1.0;
+    time = iTime / 10.0;
+
+#if 0
+    float n = 1.0003;
+    float Ne = 2.545e25;
+    Beta_R =
+            8.0 * M_PI * M_PI * M_PI * pow(n*n - 1.0, 2.0)
+    / //--------------------------------------------------
+                     (3.0 * Ne * pow(gamma, vec3(4.0))); 
+#endif
 
     // Fixed/moving sun
 #if 0
-    sunDir = normalize(vec3(1.0, -0.03, 0.0));
+    sunDir = normalize(vec3(1.0, -0.05, 0.0));
 #else
     sunDir = normalize(vec3(sin(time), abs(cos(time)) - 0.5, 0.0));
 #endif
 
     // We want -1 to 1
     vec2 uv = 2.0 * ((fragCoord)-0.5 * iResolution.xy) / iResolution.y;
+
     vec3 ro = vec3(0.0, 1.0 + R_earth, 0.0);
 
 #if 0
@@ -222,10 +280,10 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
     vec3 rd_WS = cam * normalize(vec3(uv, nearPlane));
 #endif
 
-    vec3 col = vec3(0.0);
-    float cutoff = -2.4;
-#if 0
-    cutoff = sin(time* 20.0);
+    float cutoff = -2.0;
+    #if 0
+    cutoff = sin(time * 1.0);
+    #endif
 
     if(uv.x > cutoff)
     {
@@ -238,12 +296,10 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
         const int bounces = 5;
         col = MultiScattering(ro, rd_WS, bounces);
     }
-#else
-    col = SingleScattering(ro, rd_WS);
-#endif
+
 
     //Vertical line
-    col = (abs(uv.x - cutoff) < 0.005) ? vec3(0.0, 1.0, 0.0) : col;
+    col = (abs(uv.x - cutoff) < 0.005) ? vec3(1.0, 0.0, 1.0) : col;
 
     col = pow(col, vec3(INV_GAMMA));
     fragColor = vec4(col, 1.0); 
