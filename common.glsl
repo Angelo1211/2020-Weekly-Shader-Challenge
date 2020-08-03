@@ -1,3 +1,5 @@
+#include "./hashes.glsl"
+
 #define INV_GAMMA  0.454545
 #define M_PI acos(-1.0)
 #define M_TAU M_PI*2.0
@@ -50,15 +52,8 @@ rotate(vec2 a, float b)
 
 //------------------------------------------------------------------------------------
 //----------------------------------Noise functions-----------------------------------
-float
-hash(float seed)
-{
-    uvec2 p = floatBitsToUint(vec2(seed+=.1,seed+=.1));
-    p = 1103515245U*((p >> 1U)^(p.yx));
-    uint h32 = 1103515245U*((p.x)^(p.y>>3U));
-    uint n = h32^(h32 >> 16);
-    return float(n)/float(0xffffffffU);
-}
+
+
 
 //------------------------------------------------------------------------------------
 //----------------------------------Camera functions------------------------------
@@ -106,8 +101,8 @@ SetCamera(vec3 ro, vec3 ta, float roll)
 vec3
 CosineWeightedRay(vec3 N, float seed)
 {
-    float u = hash(seed + 70.93);
-    float v = hash(seed + 21.43);
+    float u = hash11(seed + 70.93);
+    float v = hash11(seed + 21.43);
 
     float a = M_TAU*v;
     u = 2.0*u - 1.0;
