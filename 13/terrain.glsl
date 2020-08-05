@@ -65,7 +65,7 @@ intersectTerrain(vec3 ro, vec3 rd, float tMin, float tMax)
 {
     float t = tMin;
 
-    const int maxSteps = 100;
+    const int maxSteps = 200;
     for(int i = 0; (i < maxSteps) && (t < tMax); ++i)
     {
         vec3 pos = ro + t*rd;
@@ -104,8 +104,8 @@ mainImage(out vec4 fragColor, in vec2 fragPos)
     //Camera setup
     float roll = 0.0;
     float nearPlane = 1.0;
-    vec3 ta = vec3(0.0);
-    vec3 ro = ta + vec3(0.0, 2.0, -5.0);
+    vec3 ta = vec3(iTime, 0, 0);
+    vec3 ro = ta + vec3(0.0, 2.0 , -5.0);
     mat3 cam = SetCamera(ro, ta, roll);
     vec3 rd = cam * normalize(vec3(uv, nearPlane));
 

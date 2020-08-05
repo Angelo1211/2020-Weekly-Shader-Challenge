@@ -8,7 +8,7 @@ const float M_PI          = 3.14159265352;
 
 //TODO Get a better approx
 #if 1
-const vec3 S_Luminance = vec3(30);
+const vec3 S_Luminance = vec3(1e5);
 #else
 const vec3 S_Luminance = 1e1 * vec3(0.98, 0.83, 0.25);
 #endif
@@ -16,15 +16,14 @@ const vec3 S_Luminance = 1e1 * vec3(0.98, 0.83, 0.25);
 vec3 gamma = vec3(6.5e-7, 5.1e-7, 4.75e-7);
 
 #if 0
-// Bodare paper
-vec3 Beta_R = vec3(6.55e-6, 1.73e-5, 2.30e-5);
+vec3 Beta_R = vec3(6.55e-6, 1.73e-5, 2.30e-5); // Bodare paper
 #else
-// Frostbite sky 
-vec3 Beta_R = vec3(5.8e-6, 1.35e-5, 3.31e-5);
+vec3 Beta_R = vec3(5.8e-6, 1.35e-5, 3.31e-5); // Frostbite sky 
+//vec3 Beta_R = vec3(4.9232e-6, 1.15e-5, 2.80e-5); // Test
 #endif
 
 
-const vec3 Beta_M = vec3(2.0e-6);
+const vec3 Beta_M = vec3(4.5e-6);
 
 const float H_Mie      = 1200.0;
 const float H_Rayleigh = 8000.0;
@@ -148,11 +147,6 @@ SingleScattering(vec3 ro, vec3 rd)
     vec3 Integral_M = vec3(0.0);
     vec3 current_M  = vec3(0.0);
 
-    /*
-            @BUG-FREE ZONE@
-                yeay
-    */
-
     // Setting up view ray values
     vec2 atmoHit_V   = RayIntersectSphere(ro, rd, vec3(0.0), R_atmo);
     vec2 groundHit_V = RayIntersectSphere(ro, rd, vec3(0.0), R_earth);
@@ -165,12 +159,9 @@ SingleScattering(vec3 ro, vec3 rd)
     vec3 previous_R = density_Start.x * transmittance;
     vec3 previous_M = density_Start.y * transmittance;
 
-    //TODO rayLength is a t, not really a length in (m)
-    // Actually maybe it is? ( follow the derivation of line 159/160)
+    //Correcting for ground hit
     float rayLength = atmoHit_V.y;
-
-    if(groundHit_V.x > 0.0)
-        rayLength = groundHit_V.x;
+    if(groundHit_V.x > 0.0) rayLength = groundHit_V.x;
 
 #if 1 
     float stepSize_V = rayLength / float(NumSamples);
@@ -194,8 +185,8 @@ SingleScattering(vec3 ro, vec3 rd)
         current_R = den_V.x * transmittance;
         current_M = den_V.y * transmittance;
 
-        Integral_R += stepSize_V * (current_R + previous_R) / 2.0;
-        Integral_M += stepSize_V * (current_M + previous_M) / 2.0;
+        Integral_R += (stepSize_V / 2.0) * (current_R + previous_R);
+        Integral_M += (stepSize_V / 2.0) * (current_M + previous_M);
 
         previous_R = current_R;
         previous_M = current_M;
@@ -210,13 +201,8 @@ SingleScattering(vec3 ro, vec3 rd)
     float Phase_R = rayleighPhaseFunction(cosTheta_v);
     float Phase_M = henyeyGreensteinPhaseFunc(cosTheta_v);
 
-#if 0
-    return S_Luminance * ( 
+    return  ( (Phase_R * ( Beta_R / (4.0 * M_PI)) * Integral_R ) +
                            (Phase_M * ( Beta_M / (4.0 * M_PI)) * Integral_M ) );
-#else
-    return S_Luminance * ( (Phase_R * ( Beta_R / (4.0 * M_PI)) * Integral_R ) +
-                           (Phase_M * ( Beta_M / (4.0 * M_PI)) * Integral_M ) );
-#endif
 }
 
 vec3
@@ -247,7 +233,7 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
 
     // Fixed/moving sun
 #if 0
-    sunDir = normalize(vec3(1.0, -0.05, 0.0));
+    sunDir = normalize(vec3(1.0, -0.12, 0.0));
 #else
     sunDir = normalize(vec3(sin(time), abs(cos(time)) - 0.5, 0.0));
 #endif
@@ -257,7 +243,7 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
 
     vec3 ro = vec3(0.0, 1.0 + R_earth, 0.0);
 
-#if 0
+#if 1
     // Fisheye cam pointing up at the sky
     const float hemiRadius = 1.0;
     float length2 = dot(uv, uv);
@@ -297,10 +283,15 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
         col = MultiScattering(ro, rd_WS, bounces);
     }
 
-
     //Vertical line
     col = (abs(uv.x - cutoff) < 0.005) ? vec3(1.0, 0.0, 1.0) : col;
 
+#if 1 
+    float exposure = 10.00;
+    vec3 white_point = vec3(1.08241, 0.96756, 0.95003);
+
+    col = vec3(1.0) - exp(-col/white_point * exposure);
     col = pow(col, vec3(INV_GAMMA));
+#endif
     fragColor = vec4(col, 1.0); 
 }

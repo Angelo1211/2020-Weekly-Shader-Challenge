@@ -656,7 +656,6 @@ mainImage(out vec4 fragColor, in vec2 fragCoord)
     sunDir = normalize((vec3(sin(time), abs(cos(time)), 0.0)));
 
     /*
-        TODO
         jump to the next section here
     */
     col = Render(rayOrigin, viewDirection_WS);
